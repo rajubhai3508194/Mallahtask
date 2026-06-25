@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -36,6 +37,12 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import com.example.R
+import com.example.data.AdMobManager
 import com.example.data.*
 import com.example.ui.theme.IslamicGreen
 import com.example.ui.theme.HalalGold
@@ -75,6 +82,15 @@ fun TaskMallahApp(viewModel: TaskMallahViewModel) {
         }
     }
 
+    // Handle OTP pending navigation
+    val isOtpRequired by viewModel.isOtpRequired.collectAsState()
+    LaunchedEffect(isOtpRequired) {
+        if (isOtpRequired) {
+            currentScreen = AppScreen.OTPVerify
+            viewModel.clearOtpRequired()
+        }
+    }
+
     // Handle Generic Toasts
     LaunchedEffect(toastMessage) {
         if (toastMessage != null) {
@@ -94,7 +110,7 @@ fun TaskMallahApp(viewModel: TaskMallahViewModel) {
         ) {
             when (currentScreen) {
                 AppScreen.Splash -> SplashScreen {
-                    currentScreen = AppScreen.Onboarding
+                    currentScreen = if (currentUser != null) AppScreen.Dashboard else AppScreen.Onboarding
                 }
                 AppScreen.Onboarding -> OnboardingScreen {
                     currentScreen = AppScreen.AuthSelection
@@ -112,9 +128,10 @@ fun TaskMallahApp(viewModel: TaskMallahViewModel) {
                     viewModel = viewModel,
                     onBack = { currentScreen = AppScreen.AuthSelection }
                 )
-                AppScreen.OTPVerify -> OTPVerifyScreen {
-                    currentScreen = AppScreen.Dashboard
-                }
+                AppScreen.OTPVerify -> OTPVerifyScreen(
+                    viewModel = viewModel,
+                    onBack = { currentScreen = AppScreen.Register }
+                )
                 AppScreen.Dashboard -> DashboardPortal(
                     viewModel = viewModel,
                     onLogout = {
@@ -148,9 +165,18 @@ fun TaskMallahApp(viewModel: TaskMallahViewModel) {
 // ----------------- SCREEN: SPLASH -----------------
 @Composable
 fun SplashScreen(onTimeout: () -> Unit) {
+    val context = LocalContext.current
+    val activity = context as? android.app.Activity
+
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(2500)
-        onTimeout()
+        if (activity != null) {
+            AdMobManager.showAppOpenAd(activity) {
+                onTimeout()
+            }
+        } else {
+            onTimeout()
+        }
     }
 
     Box(
@@ -164,19 +190,20 @@ fun SplashScreen(onTimeout: () -> Unit) {
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            // Elegant Vector Icon Frame
+            // Elegant official App Logo
             Box(
                 modifier = Modifier
-                    .size(100.dp)
-                    .background(Color.White.copy(alpha = 0.15f), CircleShape)
-                    .border(2.dp, HalalGold, CircleShape),
+                    .size(130.dp)
+                    .background(Color(0xFF121212), CircleShape)
+                    .border(3.dp, HalalGold, CircleShape)
+                    .clip(CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Default.Payments,
-                    contentDescription = "Wallet",
-                    tint = HalalGold,
-                    modifier = Modifier.size(54.dp)
+                Image(
+                    painter = painterResource(id = R.drawable.img_app_logo),
+                    contentDescription = "TaskMallah Logo",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
                 )
             }
             Spacer(modifier = Modifier.height(24.dp))
@@ -461,7 +488,6 @@ fun RegisterScreen(viewModel: TaskMallahViewModel, onBack: () -> Unit, onSuccess
             Button(
                 onClick = {
                     if (name.length < 3) {
-                        viewModel.loginUser("") // Trigger dummy failure check or validation
                         Toast.makeText(context, "Sahi naam darj karein.", Toast.LENGTH_SHORT).show()
                     } else {
                         step = 2
@@ -473,6 +499,35 @@ fun RegisterScreen(viewModel: TaskMallahViewModel, onBack: () -> Unit, onSuccess
                 colors = ButtonDefaults.buttonColors(containerColor = IslamicGreen)
             ) {
                 Text("Agla Step", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)
+            ) {
+                HorizontalDivider(modifier = Modifier.weight(1f), color = Color.LightGray.copy(alpha = 0.5f))
+                Text(" YA ", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(horizontal = 8.dp))
+                HorizontalDivider(modifier = Modifier.weight(1f), color = Color.LightGray.copy(alpha = 0.5f))
+            }
+
+            OutlinedButton(
+                onClick = {
+                    viewModel.loginWithGoogle("MOCK_GOOGLE_ID_TOKEN_" + System.currentTimeMillis())
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
+                border = BorderStroke(1.dp, Color.LightGray),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AccountCircle,
+                    contentDescription = "Google Icon",
+                    tint = IslamicGreen,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Continue with Google", fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onBackground)
             }
         } else {
             Text("Security & CNIC Info", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
@@ -531,8 +586,49 @@ fun RegisterScreen(viewModel: TaskMallahViewModel, onBack: () -> Unit, onSuccess
 fun LoginScreen(viewModel: TaskMallahViewModel, onBack: () -> Unit) {
     var identifier by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var showResetDialog by remember { mutableStateOf(false) }
+    var resetEmail by remember { mutableStateOf("") }
 
     val authError by viewModel.authError.collectAsState()
+
+    if (showResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            title = { Text("Password Recovery", color = IslamicGreen, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("Bara-e-meherbani apna registered email address darj karein taake aap ko recovery link bheja ja sake.", fontSize = 14.sp)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = resetEmail,
+                        onValueChange = { resetEmail = it },
+                        label = { Text("Email Address") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = IslamicGreen) }
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (resetEmail.isNotBlank()) {
+                            viewModel.forgotPassword(resetEmail)
+                            showResetDialog = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = IslamicGreen)
+                ) {
+                    Text("Email Bhein", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) {
+                    Text("Cancel", color = Color.Gray)
+                }
+            }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -585,11 +681,20 @@ fun LoginScreen(viewModel: TaskMallahViewModel, onBack: () -> Unit) {
             visualTransformation = PasswordVisualTransformation(),
             leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = IslamicGreen) }
         )
-        Spacer(modifier = Modifier.height(32.dp))
+        
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.CenterEnd
+        ) {
+            TextButton(onClick = { showResetDialog = true }) {
+                Text("Forgot Password?", color = IslamicGreen, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
 
         Button(
             onClick = {
-                viewModel.loginUser(identifier)
+                viewModel.loginUser(identifier, password)
             },
             modifier = Modifier
                 .fillMaxWidth()
@@ -599,6 +704,35 @@ fun LoginScreen(viewModel: TaskMallahViewModel, onBack: () -> Unit) {
             shape = RoundedCornerShape(12.dp)
         ) {
             Text("Login", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)
+        ) {
+            HorizontalDivider(modifier = Modifier.weight(1f), color = Color.LightGray.copy(alpha = 0.5f))
+            Text(" YA ", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(horizontal = 8.dp))
+            HorizontalDivider(modifier = Modifier.weight(1f), color = Color.LightGray.copy(alpha = 0.5f))
+        }
+
+        OutlinedButton(
+            onClick = {
+                viewModel.loginWithGoogle("MOCK_GOOGLE_ID_TOKEN_" + System.currentTimeMillis())
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp),
+            border = BorderStroke(1.dp, Color.LightGray),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.AccountCircle,
+                contentDescription = "Google Icon",
+                tint = IslamicGreen,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Continue with Google", fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onBackground)
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -614,8 +748,9 @@ fun LoginScreen(viewModel: TaskMallahViewModel, onBack: () -> Unit) {
 
 // ----------------- SCREEN: OTP VERIFY -----------------
 @Composable
-fun OTPVerifyScreen(onVerify: () -> Unit) {
+fun OTPVerifyScreen(viewModel: TaskMallahViewModel, onBack: () -> Unit) {
     var code by remember { mutableStateOf("") }
+    val authError by viewModel.authError.collectAsState()
 
     Column(
         modifier = Modifier
@@ -629,8 +764,23 @@ fun OTPVerifyScreen(onVerify: () -> Unit) {
         Spacer(modifier = Modifier.height(24.dp))
         Text("OTP Phone Verification", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = IslamicGreen)
         Spacer(modifier = Modifier.height(12.dp))
-        Text("Hum ne aap ke mobile number par 6-digits ka OTP SMS bheja hai.", textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onBackground.copy(0.7f))
+        Text("Hum ne aap ke mobile number par 6-digits ka OTP SMS bheja hai. (Tasdeeq ke liye OTP Code enter karein, ya default code '786786' use karein)", textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onBackground.copy(0.7f))
         Spacer(modifier = Modifier.height(24.dp))
+
+        if (authError != null) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = ErrorRed.copy(alpha = 0.1f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = authError!!,
+                    color = ErrorRed,
+                    modifier = Modifier.padding(12.dp),
+                    fontSize = 14.sp
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
 
         OutlinedTextField(
             value = code,
@@ -643,13 +793,19 @@ fun OTPVerifyScreen(onVerify: () -> Unit) {
         Spacer(modifier = Modifier.height(24.dp))
 
         Button(
-            onClick = onVerify,
+            onClick = {
+                viewModel.verifyOtpAndRegister(code)
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(50.dp),
             colors = ButtonDefaults.buttonColors(containerColor = IslamicGreen)
         ) {
             Text("Tasdeeq Karein (Verify)", color = Color.White, fontWeight = FontWeight.Bold)
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        TextButton(onClick = onBack) {
+            Text("Wapis Jayein (Back)", color = IslamicGreen, fontWeight = FontWeight.Medium)
         }
     }
 }
@@ -760,13 +916,17 @@ fun EarnerHomeScreen(viewModel: TaskMallahViewModel) {
     val currentUser by viewModel.currentUser.collectAsState()
     val transactions by viewModel.userTransactions.collectAsState()
     var showWithdrawalDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val activity = context as? android.app.Activity
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.weight(1f)) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
         item {
             // Elegant Greeting & Brand Card
             Row(
@@ -938,6 +1098,9 @@ fun EarnerHomeScreen(viewModel: TaskMallahViewModel) {
                 }
             }
         }
+        }
+        }
+        AdMobBannerAd()
     }
 
     // WITHDRAWAL REQUEST SCREEN SHEET
@@ -995,7 +1158,13 @@ fun EarnerHomeScreen(viewModel: TaskMallahViewModel) {
                     onClick = {
                         val amt = withdrawAmount.toDoubleOrNull()
                         if (amt != null) {
-                            viewModel.submitWithdrawal(amt, selectedMethod, accountTitle, accountNo)
+                            if (activity != null) {
+                                AdMobManager.showInterstitial(activity) {
+                                    viewModel.submitWithdrawal(amt, selectedMethod, accountTitle, accountNo)
+                                }
+                            } else {
+                                viewModel.submitWithdrawal(amt, selectedMethod, accountTitle, accountNo)
+                            }
                             showWithdrawalDialog = false
                         }
                     },
@@ -1096,7 +1265,10 @@ fun EarnerTaskBrowserScreen(viewModel: TaskMallahViewModel) {
                         }
                     }
                 } else {
-                    items(filteredTasks) { task ->
+                    itemsIndexed(filteredTasks) { index, task ->
+                        if (index > 0 && index % 3 == 0) {
+                            AdMobNativeAdRow(modifier = Modifier.padding(vertical = 8.dp))
+                        }
                         Card(
                             onClick = {
                                 viewModel.selectTask(task)
@@ -1138,6 +1310,8 @@ fun EarnerTaskBrowserScreen(viewModel: TaskMallahViewModel) {
                     }
                 }
             }
+            Spacer(modifier = Modifier.height(8.dp))
+            AdMobBannerAd()
         }
     }
 }
@@ -1148,6 +1322,8 @@ fun EarnerTaskBrowserScreen(viewModel: TaskMallahViewModel) {
 fun TaskDetailSheet(viewModel: TaskMallahViewModel, onBack: () -> Unit) {
     val task by viewModel.selectedTask.collectAsState()
     val completion by viewModel.selectedTaskCompletion.collectAsState()
+    val context = LocalContext.current
+    val activity = context as? android.app.Activity
 
     var screenshotMockPath by remember { mutableStateOf("") }
 
@@ -1254,7 +1430,13 @@ fun TaskDetailSheet(viewModel: TaskMallahViewModel, onBack: () -> Unit) {
                     item {
                         Button(
                             onClick = {
-                                viewModel.submitTaskCompletionProof(t.id, screenshotMockPath)
+                                if (activity != null) {
+                                    AdMobManager.showRewardedInterstitial(activity) {
+                                        viewModel.submitTaskCompletionProof(t.id, screenshotMockPath)
+                                    }
+                                } else {
+                                    viewModel.submitTaskCompletionProof(t.id, screenshotMockPath)
+                                }
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = HalalGold),
                             modifier = Modifier.fillMaxWidth().testTag("submit_proof_button")
@@ -1272,6 +1454,8 @@ fun TaskDetailSheet(viewModel: TaskMallahViewModel, onBack: () -> Unit) {
 @Composable
 fun AdMobEarningScreen(viewModel: TaskMallahViewModel) {
     val currentUser by viewModel.currentUser.collectAsState()
+    val context = LocalContext.current
+    val activity = context as? android.app.Activity
 
     Column(
         modifier = Modifier
@@ -1289,7 +1473,15 @@ fun AdMobEarningScreen(viewModel: TaskMallahViewModel) {
         Spacer(modifier = Modifier.height(32.dp))
 
         Button(
-            onClick = { viewModel.watchAdMobAd("REWARDED") },
+            onClick = {
+                if (activity != null) {
+                    AdMobManager.showRewardedAd(activity) {
+                        viewModel.watchAdMobAd("REWARDED")
+                    }
+                } else {
+                    viewModel.watchAdMobAd("REWARDED")
+                }
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(54.dp)
@@ -1305,7 +1497,15 @@ fun AdMobEarningScreen(viewModel: TaskMallahViewModel) {
         Spacer(modifier = Modifier.height(16.dp))
 
         OutlinedButton(
-            onClick = { viewModel.watchAdMobAd("INTERSTITIAL") },
+            onClick = {
+                if (activity != null) {
+                    AdMobManager.showInterstitial(activity) {
+                        viewModel.watchAdMobAd("INTERSTITIAL")
+                    }
+                } else {
+                    viewModel.watchAdMobAd("INTERSTITIAL")
+                }
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(54.dp)
@@ -1609,6 +1809,7 @@ fun AdminHomeScreen(viewModel: TaskMallahViewModel) {
     val pendingDeposits by viewModel.adminPendingDeposits.collectAsState()
     val pendingWithdrawals by viewModel.adminPendingWithdrawals.collectAsState()
     val allUsers by viewModel.adminAllUsers.collectAsState()
+    val adminProfitPool by viewModel.adminProfitPool.collectAsState()
 
     LazyColumn(
         modifier = Modifier
@@ -1627,7 +1828,7 @@ fun AdminHomeScreen(viewModel: TaskMallahViewModel) {
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Text("Admin Profit Pool", fontSize = 12.sp)
-                    Text("34,250.00 PKR", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = IslamicGreen)
+                    Text("${String.format("%.2f", adminProfitPool)} PKR", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = IslamicGreen)
                     Text("Overall float in system: 1,450,000 PKR", fontSize = 11.sp, color = Color.Gray)
                 }
             }
@@ -1894,6 +2095,51 @@ fun ProfileScreen(viewModel: TaskMallahViewModel, onLogout: () -> Unit) {
         item {
             Text(currentUser?.name ?: "User Profile", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = IslamicGreen)
             Text(currentUser?.email ?: "", fontSize = 13.sp, color = Color.Gray)
+        }
+
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, HalalGold.copy(0.3f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(50.dp)
+                            .background(Color(0xFF121212), CircleShape)
+                            .border(1.5.dp, HalalGold, CircleShape)
+                            .clip(CircleShape)
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.img_app_logo),
+                            contentDescription = "Official Brand Logo",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = "Mallah Creative Platform",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = HalalGoldDark
+                        )
+                        Text(
+                            text = "Official Halal Earning ecosystem. Secured & verified.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.8f)
+                        )
+                    }
+                }
+            }
         }
 
         item {

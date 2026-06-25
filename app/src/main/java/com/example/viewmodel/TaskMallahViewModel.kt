@@ -22,6 +22,17 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
     private val _activeRole = MutableStateFlow("EARNER")
     val activeRole: StateFlow<String> = _activeRole.asStateFlow()
 
+    // Admin Profit Pool StateFlow
+    val adminProfitPool: StateFlow<Double> = repository.adminProfitPool
+
+    // OTP Navigation StateFlows
+    private val _isOtpRequired = MutableStateFlow(false)
+    val isOtpRequired: StateFlow<Boolean> = _isOtpRequired.asStateFlow()
+
+    fun clearOtpRequired() {
+        _isOtpRequired.value = false
+    }
+
     // --- Earner Flows ---
     val allTasks: StateFlow<List<TaskEntity>> = repository.getTasksFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -115,7 +126,8 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
     init {
         viewModelScope.launch {
             repository.initializeDatabaseIfNeeded()
-            // Auto login Raju Bhai on launch if we want, or stay on login screen. Let's start with a demo setup.
+            _currentUser.value = repository.currentUser
+            _activeRole.value = repository.currentUser?.role ?: "EARNER"
         }
     }
 
@@ -158,20 +170,36 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
             val result = repository.signup(name, email, phone, passwordPlain, cnic, referralCode)
             _isProcessing.value = false
             result.onSuccess { user ->
-                _currentUser.value = user
-                _activeRole.value = user.role
-                _authSuccess.value = "Kush Amdeed! Aap ka TaskMallah account kamyabi se ban gaya hai."
+                _isOtpRequired.value = true
+                _toastMessage.value = "Tasdeeq ke liye OTP Code bhej diya gaya hai."
             }.onFailure { exception ->
                 _authError.value = exception.message ?: "Registration nakam ho gayi."
             }
         }
     }
 
-    fun loginUser(identifier: String) {
+    fun verifyOtpAndRegister(enteredCode: String) {
         _isProcessing.value = true
         clearAuthMessages()
         viewModelScope.launch {
-            val result = repository.login(identifier)
+            val result = repository.verifyOtpAndCompleteSignup(enteredCode)
+            _isProcessing.value = false
+            result.onSuccess { user ->
+                _currentUser.value = user
+                _activeRole.value = user.role
+                _isOtpRequired.value = false
+                _authSuccess.value = "Khush Amdeed! Aap ka TaskMallah account kamyabi se ban gaya hai."
+            }.onFailure { exception ->
+                _authError.value = exception.message ?: "OTP tasdeeq nakam ho gayi."
+            }
+        }
+    }
+
+    fun loginUser(identifier: String, passwordPlain: String) {
+        _isProcessing.value = true
+        clearAuthMessages()
+        viewModelScope.launch {
+            val result = repository.login(identifier, passwordPlain)
             _isProcessing.value = false
             result.onSuccess { user ->
                 _currentUser.value = user
@@ -179,6 +207,36 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
                 _authSuccess.value = "Khush Amdeed dobara, ${user.name}!"
             }.onFailure { exception ->
                 _authError.value = exception.message ?: "Login nakam ho gayi."
+            }
+        }
+    }
+
+    fun loginWithGoogle(idToken: String) {
+        _isProcessing.value = true
+        clearAuthMessages()
+        viewModelScope.launch {
+            val result = repository.loginWithGoogleToken(idToken)
+            _isProcessing.value = false
+            result.onSuccess { user ->
+                _currentUser.value = user
+                _activeRole.value = user.role
+                _authSuccess.value = "Google ke zariye khush amdeed, ${user.name}!"
+            }.onFailure { exception ->
+                _authError.value = exception.message ?: "Google Sign-In nakam ho gaya."
+            }
+        }
+    }
+
+    fun forgotPassword(email: String) {
+        _isProcessing.value = true
+        clearAuthMessages()
+        viewModelScope.launch {
+            val result = repository.sendPasswordReset(email)
+            _isProcessing.value = false
+            result.onSuccess {
+                _authSuccess.value = "Password reset email bhej di gayi hai. Bara-e-meherbani apni inbox check karein."
+            }.onFailure { exception ->
+                _authError.value = exception.message ?: "Reset email bhejne mein ghalati hui."
             }
         }
     }

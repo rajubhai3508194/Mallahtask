@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.ViewModelProvider
+import com.example.data.AdMobManager
 import com.example.data.AppDatabase
 import com.example.data.TaskMallahRepository
 import com.example.ui.TaskMallahApp
@@ -17,8 +18,11 @@ class MainActivity : ComponentActivity() {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
 
+    // Initialize AdMob
+    AdMobManager.initialize(this)
+
     val database = AppDatabase.getDatabase(applicationContext)
-    val repository = TaskMallahRepository(database)
+    val repository = TaskMallahRepository(applicationContext, database)
     val factory = ViewModelFactory(repository)
     val viewModel = ViewModelProvider(this, factory)[TaskMallahViewModel::class.java]
 
