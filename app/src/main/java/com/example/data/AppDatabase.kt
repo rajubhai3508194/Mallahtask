@@ -14,9 +14,10 @@ import androidx.room.RoomDatabase
         KycEntity::class,
         DepositRequestEntity::class,
         WithdrawalRequestEntity::class,
-        AdViewsEntity::class
+        AdViewsEntity::class,
+        SavedAccountEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

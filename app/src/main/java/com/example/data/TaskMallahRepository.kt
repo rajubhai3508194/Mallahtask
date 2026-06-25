@@ -251,6 +251,27 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
                 processedAt = System.currentTimeMillis()
             ))
         }
+
+        // Force-reset mallah7887@gmail.com and demo.google@gmail.com balances strictly to 0.0 PKR on launch
+        val usersToReset = listOf("mallah7887@gmail.com", "demo.google@gmail.com")
+        for (email in usersToReset) {
+            val dbUser = dao.getUserByEmailOrPhone(email)
+            if (dbUser != null) {
+                val updated = dbUser.copy(walletBalancePkr = 0.0, totalEarnedPkr = 0.0)
+                dao.updateUser(updated)
+                
+                if (firestore != null) {
+                    try {
+                        Tasks.await(
+                            firestore!!.collection("users").document(dbUser.id)
+                                .update("walletBalancePkr", 0.0, "totalEarnedPkr", 0.0)
+                        )
+                    } catch (e: Exception) {
+                        Log.e("TaskMallahRepository", "Failed to reset balance in Firestore: ${e.message}")
+                    }
+                }
+            }
+        }
     }
 
     // Authentication & Registration Flow
@@ -685,7 +706,13 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
     }
 
     // Submission Flow
-    suspend fun submitTaskProof(taskId: String, screenshotPath: String): Result<Unit> {
+    suspend fun submitTaskProof(
+        taskId: String,
+        screenshotPath: String,
+        customText: String? = null,
+        taskTitle: String? = null,
+        completionDate: Long? = null
+    ): Result<Unit> {
         val user = currentUser ?: return Result.failure(Exception("Pehle login karein."))
         val task = dao.getTaskById(taskId) ?: return Result.failure(Exception("Task nahi mila."))
 
@@ -704,15 +731,39 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
             taskId = taskId,
             earnerId = user.id,
             screenshotPath = screenshotPath,
-            payoutAmountPkr = task.userPayoutPkr
+            payoutAmountPkr = task.userPayoutPkr,
+            customText = customText,
+            taskTitle = taskTitle ?: task.campaignName,
+            completionDate = completionDate ?: System.currentTimeMillis()
         )
         dao.insertCompletion(completion)
+
+        // Store this rich metadata in a structured 'submitted_tasks' collection on Firestore
+        if (firestore != null) {
+            val submissionMap = hashMapOf(
+                "id" to completion.id,
+                "taskId" to taskId,
+                "earnerId" to user.id,
+                "screenshotPath" to screenshotPath,
+                "submittedAt" to completion.submittedAt,
+                "status" to completion.status,
+                "payoutAmountPkr" to completion.payoutAmountPkr,
+                "customText" to customText,
+                "taskTitle" to (taskTitle ?: task.campaignName),
+                "completionDate" to (completionDate ?: System.currentTimeMillis())
+            )
+            try {
+                Tasks.await(firestore!!.collection("submitted_tasks").document(completion.id).set(submissionMap))
+            } catch (e: Exception) {
+                Log.e("TaskMallahRepository", "Failed to save submission metadata in Firestore: ${e.message}")
+            }
+        }
 
         return Result.success(Unit)
     }
 
     // AdMob Earnings Flow (Server-Verified simulation with limits)
-    suspend fun watchAd(adType: String): Result<Double> {
+    suspend fun watchAd(adType: String, rewardAmountFromAdMob: Double? = null): Result<Double> {
         val user = currentUser ?: return Result.failure(Exception("Pehle login karein."))
         val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
         val adViewsId = "${user.id}_$today"
@@ -725,10 +776,12 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
         val now = System.currentTimeMillis()
         val cooldownMillis = 3 * 60 * 1000 // 3 minutes cooldown
 
-        val maxRewarded = when (user.accountLevel) {
-            "Platinum" -> 35
-            "Gold" -> 25
-            else -> 20
+        val activeTier = user.subscriptionTier ?: "Free"
+        val maxRewarded = when (activeTier) {
+            "Basic" -> 15
+            "Gold" -> 30
+            "Diamond" -> 999999 // Unlimited
+            else -> 5 // Free
         }
         val maxInterstitial = when (user.accountLevel) {
             "Platinum" -> 25
@@ -747,7 +800,12 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
             }
             adRecord.rewardedCount += 1
             adRecord.lastRewardedAt = now
-            rewardAmount = 0.35 // 0.35 PKR reward
+            rewardAmount = rewardAmountFromAdMob ?: when (activeTier) {
+                "Basic" -> 3.0
+                "Gold" -> 7.0
+                "Diamond" -> 15.0
+                else -> 0.20 // Free
+            }
         } else {
             if (adRecord.interstitialCount >= maxInterstitial) {
                 return Result.failure(Exception("Aap ki aaj ki Interstitial ad dekhne ki limit mukammal ho chuki hai ($maxInterstitial/day)."))
@@ -774,6 +832,18 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
         dao.updateUser(updatedUser)
         currentUser = updatedUser
 
+        // Update in Firestore if live
+        if (firestore != null) {
+            try {
+                Tasks.await(
+                    firestore!!.collection("users").document(user.id)
+                        .update("walletBalancePkr", newBalance, "totalEarnedPkr", newTotalEarned, "accountLevel", updatedUser.accountLevel)
+                )
+            } catch (e: Exception) {
+                Log.e("TaskMallahRepository", "Failed to update ad reward in Firestore: ${e.message}")
+            }
+        }
+
         // Record Transaction
         dao.insertTransaction(TransactionEntity(
             id = UUID.randomUUID().toString(),
@@ -785,6 +855,45 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
             referenceId = "ad_view_${System.currentTimeMillis()}",
             description = "Earning from AdMob $adType Ad"
         ))
+
+        // --- LIFETIME PASSIVE REFERRAL COMMISSION TRIGGER ---
+        if (user.referredBy != null) {
+            val referrer = dao.getUserById(user.referredBy)
+            if (referrer != null) {
+                val commission = rewardAmount * 0.10
+                val refNewBalance = referrer.walletBalancePkr + commission
+                val refNewReferralTotal = referrer.totalReferralPkr + commission
+                val updatedReferrer = referrer.copy(
+                    walletBalancePkr = refNewBalance,
+                    totalReferralPkr = refNewReferralTotal
+                )
+                dao.updateUser(updatedReferrer)
+
+                // Update Referrer in Firestore if live
+                if (firestore != null) {
+                    try {
+                        Tasks.await(
+                            firestore!!.collection("users").document(referrer.id)
+                                .update("walletBalancePkr", refNewBalance, "totalReferralPkr", refNewReferralTotal)
+                        )
+                    } catch (e: Exception) {
+                        Log.e("TaskMallahRepository", "Failed to update referrer in Firestore: ${e.message}")
+                    }
+                }
+
+                // Record Referrer Transaction
+                dao.insertTransaction(TransactionEntity(
+                    id = UUID.randomUUID().toString(),
+                    userId = referrer.id,
+                    type = "REFERRAL",
+                    source = "L1 Ad: ${user.name}",
+                    amountPkr = commission,
+                    balanceAfterPkr = refNewBalance,
+                    referenceId = "ref_ad_${System.currentTimeMillis()}",
+                    description = "10% Lifetime Passive Referral Commission from ${user.name}'s Ad view"
+                ))
+            }
+        }
 
         return Result.success(rewardAmount)
     }
@@ -1217,6 +1326,138 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
         val updatedUser = user.copy(isBanned = ban, banReason = if (ban) reason else null)
 
         dao.updateUser(updatedUser)
+        return Result.success(Unit)
+    }
+
+    suspend fun buySubscription(tier: String): Result<Unit> {
+        val user = currentUser ?: return Result.failure(Exception("Pehle login karein."))
+        val cost = when (tier) {
+            "Basic" -> 1000.0
+            "Gold" -> 2500.0
+            "Diamond" -> 5000.0
+            else -> 0.0
+        }
+        if (user.walletBalancePkr < cost) {
+            return Result.failure(Exception("Aap ka wallet balance na-kaafi hai. Is package ke liye $cost PKR laazmi hain."))
+        }
+        val newBalance = user.walletBalancePkr - cost
+        val updatedUser = user.copy(
+            subscriptionTier = tier,
+            walletBalancePkr = newBalance
+        )
+        dao.updateUser(updatedUser)
+        currentUser = updatedUser
+
+        // Also update Firestore if available
+        if (firestore != null) {
+            try {
+                Tasks.await(
+                    firestore!!.collection("users").document(user.id)
+                        .update("subscriptionTier", tier, "walletBalancePkr", newBalance)
+                )
+            } catch (e: Exception) {
+                Log.e("FirebaseSubscription", "Failed to update subscription in Firestore: ${e.message}")
+            }
+        }
+
+        // Add Transaction
+        dao.insertTransaction(TransactionEntity(
+            id = UUID.randomUUID().toString(),
+            userId = user.id,
+            type = "ADMIN_ADJUSTMENT",
+            source = "Package Activation",
+            amountPkr = -cost,
+            balanceAfterPkr = newBalance,
+            referenceId = "sub_${tier.lowercase()}_${System.currentTimeMillis()}",
+            description = "Activated Premium $tier Package"
+        ))
+
+        return Result.success(Unit)
+    }
+
+    suspend fun updateProfilePic(uri: String): Result<Unit> {
+        val user = currentUser ?: return Result.failure(Exception("Pehle login karein."))
+        val updatedUser = user.copy(profilePicUri = uri)
+        dao.updateUser(updatedUser)
+        currentUser = updatedUser
+
+        if (firestore != null) {
+            try {
+                Tasks.await(
+                    firestore!!.collection("users").document(user.id)
+                        .update("profilePicUri", uri)
+                )
+            } catch (e: Exception) {
+                Log.e("FirebaseProfilePic", "Failed to update profile pic in Firestore: ${e.message}")
+            }
+        }
+        return Result.success(Unit)
+    }
+
+    fun getSavedAccountsFlow(userId: String): Flow<List<SavedAccountEntity>> {
+        return dao.getSavedAccountsForUserFlow(userId)
+    }
+
+    suspend fun linkPaymentAccount(bankName: String, accountTitle: String, accountNumber: String, iban: String): Result<Unit> {
+        val user = currentUser ?: return Result.failure(Exception("Pehle login karein."))
+        
+        // Super Admin check bypasses locks
+        val isSuperAdmin = user.email.lowercase() == "rajubhai3508194@gmail.com" || user.phone == "03496677887"
+        
+        if (user.isPaymentDetailsLocked && !isSuperAdmin) {
+            return Result.failure(Exception("Aap ke payment accounts locked hain! Tabdeeli ke liye Super Admin se rabta karein."))
+        }
+
+        val existingAccounts = dao.getSavedAccountsForUser(user.id)
+        if (existingAccounts.size >= 5 && !isSuperAdmin) {
+            return Result.failure(Exception("Aap maximum 5 payment accounts link kar sakte hain."))
+        }
+
+        val newAccount = SavedAccountEntity(
+            id = UUID.randomUUID().toString(),
+            userId = user.id,
+            bankName = bankName,
+            accountTitle = accountTitle,
+            accountNumber = accountNumber,
+            iban = iban
+        )
+        dao.insertSavedAccount(newAccount)
+
+        return Result.success(Unit)
+    }
+
+    suspend fun lockPaymentDetails(userId: String, lock: Boolean): Result<Unit> {
+        val admin = currentUser ?: return Result.failure(Exception("Admin not logged in."))
+        if (admin.role != "ADMIN" && admin.email.lowercase() != "rajubhai3508194@gmail.com") {
+            return Result.failure(Exception("Permission denied."))
+        }
+
+        val user = dao.getUserById(userId) ?: return Result.failure(Exception("User not found."))
+        val updatedUser = user.copy(isPaymentDetailsLocked = lock)
+        dao.updateUser(updatedUser)
+        
+        if (firestore != null) {
+            try {
+                Tasks.await(
+                    firestore!!.collection("users").document(userId)
+                        .update("isPaymentDetailsLocked", lock)
+                )
+            } catch (e: Exception) {
+                Log.e("FirebasePaymentLock", "Failed to update payment lock in Firestore: ${e.message}")
+            }
+        }
+        return Result.success(Unit)
+    }
+
+    suspend fun deleteSavedAccount(accountId: String): Result<Unit> {
+        val user = currentUser ?: return Result.failure(Exception("Pehle login karein."))
+        val isSuperAdmin = user.email.lowercase() == "rajubhai3508194@gmail.com" || user.phone == "03496677887"
+        
+        if (user.isPaymentDetailsLocked && !isSuperAdmin) {
+            return Result.failure(Exception("Aap ke payment accounts locked hain! Tabdeeli ke liye Super Admin se rabta karein."))
+        }
+
+        dao.deleteSavedAccountById(accountId)
         return Result.success(Unit)
     }
 }

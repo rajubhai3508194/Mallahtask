@@ -18,6 +18,20 @@ class MainActivity : ComponentActivity() {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
 
+    // Initialize Firebase manually with safe fallback options to avoid startup crashes when google-services.json is missing
+    try {
+      if (com.google.firebase.FirebaseApp.getApps(this).isEmpty()) {
+        val options = com.google.firebase.FirebaseOptions.Builder()
+          .setApplicationId("1:1234567890:android:abcdef")
+          .setApiKey("AIzaSyDummyKeyForInitializationOnly")
+          .setProjectId("taskmallah-prod")
+          .build()
+        com.google.firebase.FirebaseApp.initializeApp(this, options)
+      }
+    } catch (e: Exception) {
+      android.util.Log.e("FirebaseInit", "Failed to initialize FirebaseApp: ${e.message}")
+    }
+
     // Initialize AdMob
     AdMobManager.initialize(this)
 

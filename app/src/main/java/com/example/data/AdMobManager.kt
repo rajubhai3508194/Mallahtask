@@ -176,6 +176,39 @@ object AdMobManager {
 
     fun showRewardedAd(activity: Activity, onEarnedReward: (Double) -> Unit) {
         val ad = rewardedAd
+        val firebaseAuth = try { com.google.firebase.auth.FirebaseAuth.getInstance() } catch(e: Exception) { null }
+        val currentUid = firebaseAuth?.currentUser?.uid
+
+        fun getRewardAmountForTier(tier: String?): Double {
+            return when (tier) {
+                "Basic" -> 3.0
+                "Gold" -> 7.0
+                "Diamond" -> 15.0
+                else -> 0.20 // Free Tier
+            }
+        }
+
+        if (currentUid != null) {
+            val firestore = try { com.google.firebase.firestore.FirebaseFirestore.getInstance() } catch(e: Exception) { null }
+            if (firestore != null) {
+                firestore.collection("users").document(currentUid).get()
+                    .addOnSuccessListener { snapshot ->
+                        val tier = snapshot.getString("subscriptionTier") ?: "Free"
+                        val dynamicReward = getRewardAmountForTier(tier)
+                        proceedWithAdShow(activity, ad, dynamicReward, onEarnedReward)
+                    }
+                    .addOnFailureListener {
+                        proceedWithAdShow(activity, ad, 0.20, onEarnedReward)
+                    }
+            } else {
+                proceedWithAdShow(activity, ad, 0.20, onEarnedReward)
+            }
+        } else {
+            proceedWithAdShow(activity, ad, 0.20, onEarnedReward)
+        }
+    }
+
+    private fun proceedWithAdShow(activity: Activity, ad: RewardedAd?, rewardAmount: Double, onEarnedReward: (Double) -> Unit) {
         if (ad != null) {
             var rewardEarned = false
             ad.fullScreenContentCallback = object : FullScreenContentCallback() {
@@ -184,15 +217,14 @@ object AdMobManager {
                     Log.d(TAG, "Rewarded Video Ad dismissed.")
                     loadRewardedAd(activity) // prefetch
                     if (rewardEarned) {
-                        onEarnedReward(0.35) // Reward amount in PKR
+                        onEarnedReward(rewardAmount)
                     }
                 }
 
                 override fun onAdFailedToShowFullScreenContent(adError: AdError) {
                     rewardedAd = null
                     Log.e(TAG, "Rewarded Video Ad failed to show: ${adError.message}")
-                    // Fallback to guarantee user progress isn't locked
-                    onEarnedReward(0.35)
+                    onEarnedReward(rewardAmount)
                 }
             }
             ad.show(activity) { rewardItem ->
@@ -201,7 +233,7 @@ object AdMobManager {
             }
         } else {
             Log.d(TAG, "Rewarded Video Ad not ready. Simulating reward fallback.")
-            onEarnedReward(0.35)
+            onEarnedReward(rewardAmount)
             loadRewardedAd(activity)
         }
     }

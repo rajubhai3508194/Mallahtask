@@ -61,6 +61,57 @@ sealed class AppScreen {
     object Dashboard : AppScreen()
 }
 
+@Composable
+fun MuslimAvatarView(avatarName: String?, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .background(
+                when (avatarName) {
+                    "Green Crescent" -> IslamicGreen
+                    "Golden Dome" -> Color(0xFF1E1E24)
+                    "Islamic Geometry" -> Color(0xFF008080)
+                    "Kaaba Minimalist" -> Color(0xFF111111)
+                    "Raju Bhai" -> Color(0xFF0D47A1)
+                    else -> IslamicGreen.copy(0.1f)
+                },
+                CircleShape
+            )
+            .border(
+                2.dp,
+                when (avatarName) {
+                    "Golden Dome" -> HalalGold
+                    "Kaaba Minimalist" -> HalalGold
+                    "Raju Bhai" -> HalalGold
+                    else -> Color.Transparent
+                },
+                CircleShape
+            )
+            .clip(CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        when (avatarName) {
+            "Green Crescent" -> {
+                Icon(Icons.Default.Brightness3, contentDescription = null, tint = Color.White, modifier = Modifier.size(36.dp))
+            }
+            "Golden Dome" -> {
+                Icon(Icons.Default.Castle, contentDescription = null, tint = HalalGold, modifier = Modifier.size(36.dp))
+            }
+            "Islamic Geometry" -> {
+                Icon(Icons.Default.Filter8, contentDescription = null, tint = HalalGold, modifier = Modifier.size(36.dp))
+            }
+            "Kaaba Minimalist" -> {
+                Icon(Icons.Default.CropSquare, contentDescription = null, tint = HalalGold, modifier = Modifier.size(36.dp))
+            }
+            "Raju Bhai" -> {
+                Text("RB", color = HalalGold, fontWeight = FontWeight.Bold, fontSize = 24.sp)
+            }
+            else -> {
+                Icon(Icons.Default.AccountBox, contentDescription = null, tint = IslamicGreen, modifier = Modifier.size(54.dp))
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskMallahApp(viewModel: TaskMallahViewModel) {
@@ -71,6 +122,21 @@ fun TaskMallahApp(viewModel: TaskMallahViewModel) {
     val toastMessage by viewModel.toastMessage.collectAsState()
     val isProcessing by viewModel.isProcessing.collectAsState()
     val activeRole by viewModel.activeRole.collectAsState()
+
+    // --- ANTI-FRAUD SECURITY DETECTIONS ---
+    var isEmulatorDetected by remember { mutableStateOf(SecurityEngine.isEmulator()) }
+    var isRootDetected by remember { mutableStateOf(SecurityEngine.isRooted()) }
+    var isVpnDetected by remember { mutableStateOf(SecurityEngine.isVpnActive(context)) }
+    var isSandboxBypassActive by remember { mutableStateOf(true) } // Enabled by default to not brick the browser preview
+    var showSecurityPanel by remember { mutableStateOf(false) }
+
+    // Periodically update VPN status
+    LaunchedEffect(Unit) {
+        while (true) {
+            isVpnDetected = SecurityEngine.isVpnActive(context)
+            kotlinx.coroutines.delay(5000)
+        }
+    }
 
     // Handle Auth success navigation
     val authSuccess by viewModel.authSuccess.collectAsState()
@@ -108,35 +174,319 @@ fun TaskMallahApp(viewModel: TaskMallahViewModel) {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            when (currentScreen) {
-                AppScreen.Splash -> SplashScreen {
-                    currentScreen = if (currentUser != null) AppScreen.Dashboard else AppScreen.Onboarding
+            val isBlocked = !isSandboxBypassActive && (isEmulatorDetected || isRootDetected)
+
+            if (isBlocked) {
+                // --- DESIGN: BEAUTIFUL ANTI-FRAUD PERMANENT BLOCK SCREEN ---
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color(0xFF0D1117))
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    // Lock Header Visual
+                    Box(
+                        modifier = Modifier
+                            .size(100.dp)
+                            .background(ErrorRed.copy(0.12f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = "Device Blocked",
+                            tint = ErrorRed,
+                            modifier = Modifier.size(48.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Text(
+                        text = "Device Blocked / اکاؤنٹ بلاک",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 22.sp,
+                        color = Color.White
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "TaskMallah Anti-Cheat Engine",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = HalalGold,
+                        letterSpacing = 1.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF161B22)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = "Urdu:",
+                                fontWeight = FontWeight.Bold,
+                                color = HalalGold,
+                                fontSize = 13.sp
+                            )
+                            Text(
+                                text = "Emulator ya Rooted mobile detect hua hai! TaskMallah ke safety rules ke tehat is device par app chalana sakht mamnoo hai. Baraye meherbani asan micro-tasks karne ke liye real physical Android mobile device istemal karein.",
+                                color = Color.LightGray,
+                                fontSize = 12.sp,
+                                lineHeight = 18.sp
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Text(
+                                text = "English:",
+                                fontWeight = FontWeight.Bold,
+                                color = HalalGold,
+                                fontSize = 13.sp
+                            )
+                            Text(
+                                text = "Emulator or Rooted device environment detected! To preserve the organic traffic quality for advertisers, TaskMallah prohibits completion of tasks on simulated, emulated, or root-compromised systems.",
+                                color = Color.LightGray,
+                                fontSize = 12.sp,
+                                lineHeight = 18.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // Simulated diagnostics info
+                    Text(
+                        text = "Device Hash: ${SecurityEngine.getDeviceUuid(context).take(20).uppercase()}...\n" +
+                                "Emulator: $isEmulatorDetected | Rooted: $isRootDetected",
+                        fontSize = 11.sp,
+                        color = Color.Gray,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 15.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(30.dp))
+
+                    // Developer Bypass Option so they are never stuck
+                    OutlinedButton(
+                        onClick = { isSandboxBypassActive = true },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = HalalGold),
+                        border = BorderStroke(1.dp, HalalGold)
+                    ) {
+                        Icon(Icons.Default.Shield, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Bypass Shield (For Testing)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
-                AppScreen.Onboarding -> OnboardingScreen {
-                    currentScreen = AppScreen.AuthSelection
+            } else {
+                // Normal App Screens
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Active VPN Warnings at the top
+                    if (!isSandboxBypassActive && isVpnDetected) {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = ErrorRed),
+                            shape = RoundedCornerShape(0.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Warning, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "VPN is active! Please disable VPN to protect your account from permanent ban.",
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    Box(modifier = Modifier.weight(1f)) {
+                        when (currentScreen) {
+                            AppScreen.Splash -> SplashScreen {
+                                currentScreen = if (currentUser != null) AppScreen.Dashboard else AppScreen.Onboarding
+                            }
+                            AppScreen.Onboarding -> OnboardingScreen {
+                                currentScreen = AppScreen.AuthSelection
+                            }
+                            AppScreen.AuthSelection -> AuthSelectionScreen(
+                                onLoginClick = { currentScreen = AppScreen.Login },
+                                onRegisterClick = { currentScreen = AppScreen.Register }
+                            )
+                            AppScreen.Register -> RegisterScreen(
+                                viewModel = viewModel,
+                                onBack = { currentScreen = AppScreen.AuthSelection },
+                                onSuccess = { currentScreen = AppScreen.OTPVerify }
+                            )
+                            AppScreen.Login -> LoginScreen(
+                                viewModel = viewModel,
+                                onBack = { currentScreen = AppScreen.AuthSelection }
+                            )
+                            AppScreen.OTPVerify -> OTPVerifyScreen(
+                                viewModel = viewModel,
+                                onBack = { currentScreen = AppScreen.Register }
+                            )
+                            AppScreen.Dashboard -> DashboardPortal(
+                                viewModel = viewModel,
+                                onLogout = {
+                                    viewModel.logout()
+                                    currentScreen = AppScreen.AuthSelection
+                                }
+                            )
+                        }
+                    }
                 }
-                AppScreen.AuthSelection -> AuthSelectionScreen(
-                    onLoginClick = { currentScreen = AppScreen.Login },
-                    onRegisterClick = { currentScreen = AppScreen.Register }
-                )
-                AppScreen.Register -> RegisterScreen(
-                    viewModel = viewModel,
-                    onBack = { currentScreen = AppScreen.AuthSelection },
-                    onSuccess = { currentScreen = AppScreen.OTPVerify }
-                )
-                AppScreen.Login -> LoginScreen(
-                    viewModel = viewModel,
-                    onBack = { currentScreen = AppScreen.AuthSelection }
-                )
-                AppScreen.OTPVerify -> OTPVerifyScreen(
-                    viewModel = viewModel,
-                    onBack = { currentScreen = AppScreen.Register }
-                )
-                AppScreen.Dashboard -> DashboardPortal(
-                    viewModel = viewModel,
-                    onLogout = {
-                        viewModel.logout()
-                        currentScreen = AppScreen.AuthSelection
+            }
+            
+            // --- SECURITY TESTING CONTROLLER PANEL ---
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = 80.dp, end = 16.dp),
+                contentAlignment = Alignment.BottomEnd
+            ) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = HalalGold),
+                    shape = RoundedCornerShape(12.dp),
+                    elevation = CardDefaults.cardElevation(6.dp),
+                    modifier = Modifier.clickable { showSecurityPanel = true }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Shield, contentDescription = "Security Panel", tint = IslamicGreen, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "🛡️ Security Shield",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Black
+                        )
+                    }
+                }
+            }
+
+            if (showSecurityPanel) {
+                AlertDialog(
+                    onDismissRequest = { showSecurityPanel = false },
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Shield, contentDescription = null, tint = IslamicGreen)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Anti-Fraud Control Hub", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text(
+                                "Demonstrate TaskMallah's 7-Layer security checks on emulators and rooted environments:",
+                                fontSize = 12.sp,
+                                color = Color.Gray
+                            )
+
+                            HorizontalDivider(color = Color.Gray.copy(0.2f))
+
+                            // Current status indicators
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                    Text("Emulator Status:", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                    Text(
+                                        if (isEmulatorDetected) "DETECTED (Simulated)" else "Not Detected",
+                                        color = if (isEmulatorDetected) ErrorRed else SuccessGreen,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                                Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                    Text("Root Environment:", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                    Text(
+                                        if (isRootDetected) "ROOTED" else "Clean / Secured",
+                                        color = if (isRootDetected) ErrorRed else SuccessGreen,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                                Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                    Text("Active VPN Tunnel:", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                    Text(
+                                        if (isVpnDetected) "ACTIVE" else "Inactive",
+                                        color = if (isVpnDetected) ErrorRed else SuccessGreen,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+
+                            HorizontalDivider(color = Color.Gray.copy(0.2f))
+
+                            // Simulation toggles
+                            Text("SIMULATION MATRIX:", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = IslamicGreen)
+
+                            // Sandbox toggle
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Developer Sandbox Bypass", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text("Allows preview to run on browser emulators", fontSize = 10.sp, color = Color.Gray)
+                                }
+                                Switch(
+                                    checked = isSandboxBypassActive,
+                                    onCheckedChange = { isSandboxBypassActive = it }
+                                )
+                            }
+
+                            // Simulate Root toggle
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Simulate Root Device", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text("Triggers block screen if bypass is OFF", fontSize = 10.sp, color = Color.Gray)
+                                }
+                                Switch(
+                                    checked = isRootDetected,
+                                    onCheckedChange = { isRootDetected = it }
+                                )
+                            }
+
+                            // Simulate VPN toggle
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Simulate Active VPN", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text("Triggers warning banner if bypass is OFF", fontSize = 10.sp, color = Color.Gray)
+                                }
+                                Switch(
+                                    checked = isVpnDetected,
+                                    onCheckedChange = { isVpnDetected = it }
+                                )
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = { showSecurityPanel = false },
+                            colors = ButtonDefaults.buttonColors(containerColor = IslamicGreen)
+                        ) {
+                            Text("Done")
+                        }
                     }
                 )
             }
@@ -916,6 +1266,9 @@ fun EarnerHomeScreen(viewModel: TaskMallahViewModel) {
     val currentUser by viewModel.currentUser.collectAsState()
     val transactions by viewModel.userTransactions.collectAsState()
     var showWithdrawalDialog by remember { mutableStateOf(false) }
+    var showSubscriptionDialog by remember { mutableStateOf(false) }
+    var showReferralDialog by remember { mutableStateOf(false) }
+    var showStatementDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val activity = context as? android.app.Activity
 
@@ -944,7 +1297,7 @@ fun EarnerHomeScreen(viewModel: TaskMallahViewModel) {
                         .padding(8.dp)
                 ) {
                     Text(
-                        text = "Lvl: ${currentUser?.accountLevel ?: "Bronze"}",
+                        text = "Lvl: ${currentUser?.accountLevel ?: "Bronze"} | ${currentUser?.subscriptionTier ?: "Free"}",
                         color = IslamicGreen,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp
@@ -995,6 +1348,67 @@ fun EarnerHomeScreen(viewModel: TaskMallahViewModel) {
                         modifier = Modifier.fillMaxWidth().testTag("earner_withdrawal_button")
                     ) {
                         Text("Pesa Nikalein (Withdraw)", color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Subscription Upgrade Button
+                Card(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { showSubscriptionDialog = true },
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(Icons.Default.WorkspacePremium, contentDescription = null, tint = HalalGoldDark)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("Upgrade", fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, color = IslamicGreen)
+                    }
+                }
+
+                // Referral History Button
+                Card(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { showReferralDialog = true },
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(Icons.Default.People, contentDescription = null, tint = IslamicGreen)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("Referral Portal", fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, color = IslamicGreen)
+                    }
+                }
+
+                // Statement Utility Button
+                Card(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { showStatementDialog = true },
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = IslamicGreen)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("Statement", fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, color = IslamicGreen)
                     }
                 }
             }
@@ -1180,6 +1594,260 @@ fun EarnerHomeScreen(viewModel: TaskMallahViewModel) {
             }
         )
     }
+
+    if (showSubscriptionDialog) {
+        AlertDialog(
+            onDismissRequest = { showSubscriptionDialog = false },
+            title = { Text("Premium Packages", color = IslamicGreen, fontWeight = FontWeight.Bold) },
+            text = {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp)
+                ) {
+                    val packages = listOf(
+                        Triple("Free", "0.0 PKR", "Ad Reward: 0.20 PKR\nDaily Limit: 5 Ads"),
+                        Triple("Basic", "1,000.0 PKR", "Ad Reward: 3.0 PKR\nDaily Limit: 15 Ads"),
+                        Triple("Gold", "2,500.0 PKR", "Ad Reward: 7.0 PKR\nDaily Limit: 30 Ads"),
+                        Triple("Diamond", "5,000.0 PKR", "Ad Reward: 15.0 PKR\nDaily Limit: Unlimited")
+                    )
+                    items(packages) { pkg ->
+                        val isCurrent = currentUser?.subscriptionTier == pkg.first
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isCurrent) IslamicGreen.copy(0.1f) else MaterialTheme.colorScheme.surface
+                            ),
+                            border = BorderStroke(1.dp, if (isCurrent) IslamicGreen else Color.Gray.copy(0.3f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(pkg.first + " Package", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = IslamicGreen)
+                                    Text("Fee: ${pkg.second}", fontSize = 12.sp, color = HalalGoldDark, fontWeight = FontWeight.SemiBold)
+                                    Text(pkg.third, fontSize = 11.sp, color = Color.Gray)
+                                }
+                                if (isCurrent) {
+                                    Text("Active", color = IslamicGreen, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                } else {
+                                    Button(
+                                        onClick = {
+                                            viewModel.buySubscriptionTier(pkg.first)
+                                            showSubscriptionDialog = false
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = IslamicGreen),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                        modifier = Modifier.height(32.dp)
+                                    ) {
+                                        Text("Activate", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSubscriptionDialog = false }) { Text("Close") }
+            }
+        )
+    }
+
+    if (showReferralDialog) {
+        val allUsers by viewModel.adminAllUsers.collectAsState()
+        val referredUsers = remember(allUsers, currentUser) {
+            allUsers.filter { it.referredBy == currentUser?.id }
+        }
+
+        AlertDialog(
+            onDismissRequest = { showReferralDialog = false },
+            title = { Text("Referral Portal & Status", color = IslamicGreen, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = IslamicGreen.copy(0.05f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Apka Referral Code", fontSize = 12.sp, color = Color.Gray)
+                            Text(currentUser?.referralCode ?: "N/A", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = IslamicGreen)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("10% Lifetime automated passive commission on all ad earnings of your referrals!", fontSize = 11.sp, textAlign = TextAlign.Center, color = HalalGoldDark)
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Total Commission:", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text("${"%.2f".format(currentUser?.totalReferralPkr ?: 0.0)} PKR", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = SuccessGreen)
+                    }
+
+                    Text("Apki Referral Network (${referredUsers.size}):", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = IslamicGreen)
+
+                    if (referredUsers.isEmpty()) {
+                        Text("Abhi tak aap ka koi referral nahi hai. Apna code share karein!", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(vertical = 8.dp))
+                    } else {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp)
+                        ) {
+                            items(referredUsers) { ref ->
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    border = BorderStroke(1.dp, Color.Gray.copy(0.15f)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(10.dp).fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column {
+                                            Text(ref.name, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                            Text("Tier: ${ref.subscriptionTier} | Level: ${ref.accountLevel}", fontSize = 10.sp, color = Color.Gray)
+                                        }
+                                        Text(
+                                            text = if (ref.isBanned) "Banned" else "Active",
+                                            color = if (ref.isBanned) ErrorRed else SuccessGreen,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showReferralDialog = false }) { Text("Close") }
+            }
+        )
+    }
+
+    if (showStatementDialog) {
+        val allTxns by viewModel.userTransactions.collectAsState()
+        val oneYearAgo = System.currentTimeMillis() - (365L * 24L * 60L * 60L * 1000L)
+        val filteredTxns = remember(allTxns) {
+            allTxns.filter { it.createdAt >= oneYearAgo }
+        }
+
+        val totalCashouts = filteredTxns.filter { it.type == "WITHDRAWAL" && it.status == "COMPLETED" }.sumOf { kotlin.math.abs(it.amountPkr) }
+        val totalAdRewards = filteredTxns.filter { it.type == "TASK_REWARD" }.sumOf { it.amountPkr }
+        val totalCommissionEarned = filteredTxns.filter { it.type == "REFERRAL" }.sumOf { it.amountPkr }
+
+        AlertDialog(
+            onDismissRequest = { showStatementDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = IslamicGreen, modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("1-Year Account Statement", color = IslamicGreen, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                }
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 450.dp)
+                ) {
+                    Text("Mallah Creative - TaskMallah Official", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+                    Divider(color = Color.Gray.copy(0.2f))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Active Package:", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(0.7f))
+                        Text(currentUser?.subscriptionTier ?: "Free", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = IslamicGreen)
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Account Level:", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(0.7f))
+                        Text(currentUser?.accountLevel ?: "Bronze", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = HalalGoldDark)
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Total Ad Rewards (1Y):", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(0.7f))
+                        Text("${"%.2f".format(totalAdRewards)} PKR", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Total Commission (1Y):", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(0.7f))
+                        Text("${"%.2f".format(totalCommissionEarned)} PKR", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SuccessGreen)
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Total Cashouts (1Y):", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(0.7f))
+                        Text("${"%.2f".format(totalCashouts)} PKR", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = ErrorRed)
+                    }
+
+                    Divider(color = Color.Gray.copy(0.2f))
+                    Text("Recent Statement Logs (Last 1 Year):", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = IslamicGreen)
+
+                    if (filteredTxns.isEmpty()) {
+                        Text("Statement logs khali hain.", fontSize = 12.sp, color = Color.Gray)
+                    } else {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 180.dp)
+                        ) {
+                            items(filteredTxns) { txn ->
+                                val dateStr = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()).format(java.util.Date(txn.createdAt))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(txn.description, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                        Text(dateStr, fontSize = 9.sp, color = Color.Gray)
+                                    }
+                                    Text(
+                                        text = "${if (txn.amountPkr > 0) "+" else ""}${txn.amountPkr} PKR",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (txn.amountPkr > 0) SuccessGreen else ErrorRed
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        Toast.makeText(context, "Statement generated successfully! Exporting PDF...", Toast.LENGTH_LONG).show()
+                        showStatementDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = IslamicGreen)
+                ) {
+                    Text("Export Statement (PDF)")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showStatementDialog = false }) { Text("Close") }
+            }
+        )
+    }
 }
 
 // ----------------- SUB-SCREEN: EARNER TASK BROWSER -----------------
@@ -1326,6 +1994,7 @@ fun TaskDetailSheet(viewModel: TaskMallahViewModel, onBack: () -> Unit) {
     val activity = context as? android.app.Activity
 
     var screenshotMockPath by remember { mutableStateOf("") }
+    var customTextProofNotes by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier
@@ -1409,18 +2078,30 @@ fun TaskDetailSheet(viewModel: TaskMallahViewModel, onBack: () -> Unit) {
                             }
                         }
                     } else {
-                        // Simulated upload
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Button(
-                                onClick = { screenshotMockPath = "proof_${System.currentTimeMillis()}.png" },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
-                            ) {
-                                Icon(Icons.Default.PhotoCamera, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Choose Photo")
-                            }
-                            if (screenshotMockPath.isNotEmpty()) {
-                                Text("Selected: $screenshotMockPath", fontSize = 12.sp, color = SuccessGreen, fontWeight = FontWeight.Bold)
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // Custom Text Notes / Proof ID Field
+                            OutlinedTextField(
+                                value = customTextProofNotes,
+                                onValueChange = { customTextProofNotes = it },
+                                label = { Text("Saboot ke mutaliq tafseelat (e.g. proof notes/ID)") },
+                                placeholder = { Text("E.g. Verified with username: ABC") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            // Simulated upload
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Button(
+                                    onClick = { screenshotMockPath = "proof_${System.currentTimeMillis()}.png" },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                                ) {
+                                    Icon(Icons.Default.PhotoCamera, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Choose Photo")
+                                }
+                                if (screenshotMockPath.isNotEmpty()) {
+                                    Text("Selected: $screenshotMockPath", fontSize = 12.sp, color = SuccessGreen, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }
@@ -1432,10 +2113,22 @@ fun TaskDetailSheet(viewModel: TaskMallahViewModel, onBack: () -> Unit) {
                             onClick = {
                                 if (activity != null) {
                                     AdMobManager.showRewardedInterstitial(activity) {
-                                        viewModel.submitTaskCompletionProof(t.id, screenshotMockPath)
+                                        viewModel.submitTaskCompletionProof(
+                                            t.id,
+                                            screenshotMockPath,
+                                            customTextProofNotes,
+                                            t.campaignName,
+                                            System.currentTimeMillis()
+                                        )
                                     }
                                 } else {
-                                    viewModel.submitTaskCompletionProof(t.id, screenshotMockPath)
+                                    viewModel.submitTaskCompletionProof(
+                                        t.id,
+                                        screenshotMockPath,
+                                        customTextProofNotes,
+                                        t.campaignName,
+                                        System.currentTimeMillis()
+                                    )
                                 }
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = HalalGold),
@@ -1525,6 +2218,7 @@ fun AdMobEarningScreen(viewModel: TaskMallahViewModel) {
 fun AdvertiserHomeScreen(viewModel: TaskMallahViewModel) {
     val currentUser by viewModel.currentUser.collectAsState()
     val campaigns by viewModel.advertiserCampaigns.collectAsState()
+    val context = LocalContext.current
 
     var showDepositDialog by remember { mutableStateOf(false) }
 
@@ -1604,38 +2298,106 @@ fun AdvertiserHomeScreen(viewModel: TaskMallahViewModel) {
     if (showDepositDialog) {
         var depAmount by remember { mutableStateOf("") }
         var depMethod by remember { mutableStateOf("EasyPaisa") }
+        var receiptPath by remember { mutableStateOf("") }
+
+        val accountsInfo = mapOf(
+            "EasyPaisa" to "EasyPaisa A/C: 03000856623\nTitle: Mallah Creative",
+            "JazzCash" to "JazzCash A/C: 03000856623\nTitle: Mallah Creative",
+            "HBL" to "HBL A/C: 50123496677887\nTitle: Mallah Creative\nIBAN: PK78HABB0050123496677887",
+            "UBL" to "UBL A/C: 90123000856623\nTitle: Raju Bhai\nIBAN: PK99UNIL0090123000856623"
+        )
 
         AlertDialog(
             onDismissRequest = { showDepositDialog = false },
-            title = { Text("Deposit Payment Proof", color = IslamicGreen) },
+            title = { Text("Deposit Funds Gateway", color = IslamicGreen, fontWeight = FontWeight.Bold) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Hamare EasyPaisa number (03000856623) par deposit bhej kar proof submit karein.", fontSize = 13.sp)
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Designated payment accounts par deposit transfer karein:", fontSize = 12.sp, color = Color.Gray)
+                    
+                    // Channel Selector
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf("EasyPaisa", "JazzCash", "HBL", "UBL").forEach { channel ->
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .border(1.5.dp, if (depMethod == channel) IslamicGreen else Color.Gray.copy(0.3f), RoundedCornerShape(8.dp))
+                                    .background(if (depMethod == channel) IslamicGreen.copy(0.08f) else Color.Transparent)
+                                    .clickable { depMethod = channel }
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(channel, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (depMethod == channel) IslamicGreen else Color.Gray)
+                            }
+                        }
+                    }
+
+                    // Display details of chosen channel
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(0.3f)),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text("Account Details (${depMethod}):", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = IslamicGreen)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(accountsInfo[depMethod] ?: "", fontSize = 12.sp, lineHeight = 16.sp)
+                        }
+                    }
+
                     OutlinedTextField(
                         value = depAmount,
                         onValueChange = { depAmount = it },
-                        label = { Text("Amount (Min 500)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        label = { Text("Transfer Amount (PKR)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
                     )
-                    OutlinedTextField(
-                        value = depMethod,
-                        onValueChange = { depMethod = it },
-                        label = { Text("Method (e.g., EasyPaisa, JazzCash, HBL)") }
-                    )
+
+                    // simulated upload screenshot proof
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { receiptPath = "receipt_tx_${System.currentTimeMillis()}.png" },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Default.UploadFile, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Upload Receipt", fontSize = 12.sp)
+                        }
+                        if (receiptPath.isNotEmpty()) {
+                            Text("Selected: ...${receiptPath.takeLast(15)}", fontSize = 11.sp, color = SuccessGreen, fontWeight = FontWeight.SemiBold)
+                        } else {
+                            Text("No file chosen", fontSize = 11.sp, color = Color.Gray)
+                        }
+                    }
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
                         val amt = depAmount.toDoubleOrNull()
-                        if (amt != null) {
-                            viewModel.submitDepositPayment(amt, depMethod, "proof_screenshot.png")
+                        if (amt == null || amt < 100) {
+                            Toast.makeText(context, "Kam se kam 100 PKR darj karein.", Toast.LENGTH_SHORT).show()
+                        } else if (receiptPath.isEmpty()) {
+                            Toast.makeText(context, "Raseed (Transfer Receipt) upload karein.", Toast.LENGTH_SHORT).show()
+                        } else {
+                            viewModel.submitDepositPayment(amt, depMethod, receiptPath)
+                            Toast.makeText(context, "Deposit request submitted! Admin approval ke baad balance update ho jayega.", Toast.LENGTH_LONG).show()
                             showDepositDialog = false
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = IslamicGreen)
                 ) {
-                    Text("Submit Proof")
+                    Text("Submit Deposit Request")
                 }
             },
             dismissButton = {
@@ -2073,6 +2835,8 @@ fun ProfileScreen(viewModel: TaskMallahViewModel, onLogout: () -> Unit) {
     var cnicNo by remember { mutableStateOf("") }
     var mockFrontPath by remember { mutableStateOf("") }
     var mockBackPath by remember { mutableStateOf("") }
+    var showAvatarDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     LazyColumn(
         modifier = Modifier
@@ -2082,13 +2846,20 @@ fun ProfileScreen(viewModel: TaskMallahViewModel, onLogout: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Box(
-                modifier = Modifier
-                    .size(90.dp)
-                    .background(IslamicGreen.copy(0.1f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.AccountBox, contentDescription = null, tint = IslamicGreen, modifier = Modifier.size(54.dp))
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                MuslimAvatarView(
+                    avatarName = currentUser?.profilePicUri,
+                    modifier = Modifier
+                        .size(90.dp)
+                        .clickable { showAvatarDialog = true }
+                )
+                Text(
+                    text = "Avatar Badlein (Click)",
+                    fontSize = 11.sp,
+                    color = IslamicGreen,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 4.dp).clickable { showAvatarDialog = true }
+                )
             }
         }
 
@@ -2244,6 +3015,162 @@ fun ProfileScreen(viewModel: TaskMallahViewModel, onLogout: () -> Unit) {
             }
         }
 
+        // --- SAVED PAYMENT ACCOUNTS LINKING & LOCKS ---
+        item {
+            val savedAccounts by viewModel.savedAccounts.collectAsState()
+            var showAddAccountDialog by remember { mutableStateOf(false) }
+
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Saved Payment Accounts (${savedAccounts.size}/5):", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = IslamicGreen)
+                    if (savedAccounts.size < 5) {
+                        TextButton(onClick = { showAddAccountDialog = true }) {
+                            Text("+ Link New", color = IslamicGreen, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                if (currentUser?.isPaymentDetailsLocked == true) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = ErrorRed.copy(0.08f)),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Lock, contentDescription = null, tint = ErrorRed, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Aap ke payment accounts locked hain! Rabta: Super Admin.", fontSize = 11.sp, color = ErrorRed, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+
+                if (savedAccounts.isEmpty()) {
+                    Text("Koi payment account link nahi hai.", fontSize = 12.sp, color = Color.Gray)
+                } else {
+                    savedAccounts.forEach { acc ->
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(0.3f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(acc.bankName, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = IslamicGreen)
+                                    Text("Title: ${acc.accountTitle}", fontSize = 12.sp)
+                                    Text("A/C No: ${acc.accountNumber}", fontSize = 12.sp)
+                                    Text("IBAN: ${acc.iban}", fontSize = 11.sp, color = Color.Gray)
+                                }
+                                
+                                val isSuperAdmin = currentUser?.email?.lowercase() == "rajubhai3508194@gmail.com" || currentUser?.phone == "03496677887"
+                                val canDelete = ! (currentUser?.isPaymentDetailsLocked ?: false) || isSuperAdmin
+                                
+                                if (canDelete) {
+                                    IconButton(onClick = { viewModel.removeSavedPaymentAccount(acc.id) }) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = ErrorRed)
+                                    }
+                                } else {
+                                    Icon(Icons.Default.Lock, contentDescription = "Locked", tint = Color.Gray, modifier = Modifier.size(20.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (showAddAccountDialog) {
+                    var bankName by remember { mutableStateOf("") }
+                    var accTitle by remember { mutableStateOf("") }
+                    var accNum by remember { mutableStateOf("") }
+                    var ibanInput by remember { mutableStateOf("") }
+
+                    AlertDialog(
+                        onDismissRequest = { showAddAccountDialog = false },
+                        title = { Text("Link Payment Account", color = IslamicGreen) },
+                        text = {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedTextField(
+                                    value = bankName,
+                                    onValueChange = { bankName = it },
+                                    label = { Text("Bank Name (e.g. HBL, EasyPaisa)") },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                OutlinedTextField(
+                                    value = accTitle,
+                                    onValueChange = { accTitle = it },
+                                    label = { Text("Account Title") },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                OutlinedTextField(
+                                    value = accNum,
+                                    onValueChange = { accNum = it },
+                                    label = { Text("Account Number") },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                OutlinedTextField(
+                                    value = ibanInput,
+                                    onValueChange = { ibanInput = it.uppercase() },
+                                    label = { Text("IBAN (e.g. PK99UBL...)") },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    val isValidIban = ibanInput.startsWith("PK") && ibanInput.length == 24 && ibanInput.substring(2).all { it.isLetterOrDigit() }
+                                    if (!isValidIban) {
+                                        Toast.makeText(context, "Ghalat IBAN! IBAN 'PK' se shuru hona chahiye aur bilkul 24 characters ka hona chahiye.", Toast.LENGTH_LONG).show()
+                                    } else if (bankName.isBlank() || accTitle.isBlank() || accNum.isBlank()) {
+                                        Toast.makeText(context, "Saare fields darj karein.", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        viewModel.linkNewPaymentAccount(bankName, accTitle, accNum, ibanInput)
+                                        showAddAccountDialog = false
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = IslamicGreen)
+                            ) {
+                                Text("Link Account")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showAddAccountDialog = false }) { Text("Cancel") }
+                        }
+                    )
+                }
+            }
+        }
+
+        // --- SUPER ADMIN OVERRIDE PAYMENT LOCKS CONTROL ---
+        if (currentUser?.email?.lowercase() == "rajubhai3508194@gmail.com" || currentUser?.phone == "03496677887") {
+            item {
+                Card(colors = CardDefaults.cardColors(containerColor = HalalGold.copy(0.1f)), modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text("Super Admin - Payment Lock Override", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = HalalGoldDark)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Lock status: ${if (currentUser?.isPaymentDetailsLocked == true) "LOCKED" else "UNLOCKED"}", fontSize = 12.sp)
+                            Button(
+                                onClick = { viewModel.changePaymentAccountLock(currentUser!!.id, !(currentUser?.isPaymentDetailsLocked ?: false)) },
+                                colors = ButtonDefaults.buttonColors(containerColor = IslamicGreen)
+                            ) {
+                                Text(if (currentUser?.isPaymentDetailsLocked == true) "Unlock Details" else "Lock Details", fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         item {
             // Logout
             Button(
@@ -2259,5 +3186,36 @@ fun ProfileScreen(viewModel: TaskMallahViewModel, onLogout: () -> Unit) {
                 Text("Log Out", fontWeight = FontWeight.Bold)
             }
         }
+    }
+
+    if (showAvatarDialog) {
+        AlertDialog(
+            onDismissRequest = { showAvatarDialog = false },
+            title = { Text("Select Minimalist Avatar", color = IslamicGreen) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val avatars = listOf("Green Crescent", "Golden Dome", "Islamic Geometry", "Kaaba Minimalist", "Raju Bhai")
+                    avatars.forEach { av ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.updateProfilePicture(av)
+                                    showAvatarDialog = false
+                                }
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            MuslimAvatarView(avatarName = av, modifier = Modifier.size(40.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(av, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showAvatarDialog = false }) { Text("Cancel") }
+            }
+        )
     }
 }

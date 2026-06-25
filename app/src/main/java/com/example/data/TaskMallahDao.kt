@@ -144,4 +144,23 @@ interface TaskMallahDao {
 
     @Query("SELECT * FROM ad_views_limit WHERE id = :id LIMIT 1")
     suspend fun getAdViewsById(id: String): AdViewsEntity?
+
+    // Saved Payment Accounts Operations
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSavedAccount(account: SavedAccountEntity)
+
+    @Update
+    suspend fun updateSavedAccount(account: SavedAccountEntity)
+
+    @Query("SELECT * FROM saved_accounts WHERE userId = :userId ORDER BY createdAt ASC")
+    fun getSavedAccountsForUserFlow(userId: String): Flow<List<SavedAccountEntity>>
+
+    @Query("SELECT * FROM saved_accounts WHERE userId = :userId")
+    suspend fun getSavedAccountsForUser(userId: String): List<SavedAccountEntity>
+
+    @Query("SELECT * FROM saved_accounts WHERE id = :id")
+    suspend fun getSavedAccountById(id: String): SavedAccountEntity?
+
+    @Query("DELETE FROM saved_accounts WHERE id = :id")
+    suspend fun deleteSavedAccountById(id: String)
 }

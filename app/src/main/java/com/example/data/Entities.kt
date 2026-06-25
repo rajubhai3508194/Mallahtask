@@ -23,7 +23,10 @@ data class UserEntity(
     var isBanned: Boolean = false,
     var banReason: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
-    var preferredPlatforms: String = "YouTube,TikTok,Instagram,Google Play" // Comma-separated list
+    var preferredPlatforms: String = "YouTube,TikTok,Instagram,Google Play", // Comma-separated list
+    var subscriptionTier: String = "Free", // Free, Basic, Gold, Diamond
+    var profilePicUri: String? = null,
+    var isPaymentDetailsLocked: Boolean = false
 ) : Serializable
 
 @Entity(tableName = "tasks")
@@ -58,7 +61,21 @@ data class CompletionEntity(
     var reviewedBy: String? = null,
     var reviewedAt: Long? = null,
     var rejectionReason: String? = null,
-    var isDuplicateFlagged: Boolean = false
+    var isDuplicateFlagged: Boolean = false,
+    var customText: String? = null,
+    var taskTitle: String? = null,
+    var completionDate: Long? = null
+) : Serializable
+
+@Entity(tableName = "saved_accounts")
+data class SavedAccountEntity(
+    @PrimaryKey val id: String,
+    val userId: String,
+    val bankName: String,
+    val accountTitle: String,
+    val accountNumber: String,
+    val iban: String,
+    val createdAt: Long = System.currentTimeMillis()
 ) : Serializable
 
 @Entity(tableName = "transactions")

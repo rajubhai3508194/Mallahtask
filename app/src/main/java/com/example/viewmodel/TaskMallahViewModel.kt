@@ -92,6 +92,12 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
             if (user != null && user.role == "ADVERTISER") repository.getAdvertiserCampaignsFlow() else flowOf(emptyList())
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // Realtime saved payment accounts
+    val savedAccounts: StateFlow<List<SavedAccountEntity>> = currentUser
+        .flatMapLatest { user ->
+            if (user != null) repository.getSavedAccountsFlow(user.id) else flowOf(emptyList())
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
 
     // --- Super Admin Realtime Flows ---
     val adminPendingCompletions: StateFlow<List<CompletionEntity>> = repository.getAllPendingCompletionsFlow()
@@ -273,10 +279,16 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
     }
 
     // --- Task Submissions Action ---
-    fun submitTaskCompletionProof(taskId: String, screenshotPath: String) {
+    fun submitTaskCompletionProof(
+        taskId: String,
+        screenshotPath: String,
+        customText: String? = null,
+        taskTitle: String? = null,
+        completionDate: Long? = null
+    ) {
         _isProcessing.value = true
         viewModelScope.launch {
-            val result = repository.submitTaskProof(taskId, screenshotPath)
+            val result = repository.submitTaskProof(taskId, screenshotPath, customText, taskTitle, completionDate)
             _isProcessing.value = false
             result.onSuccess {
                 _toastMessage.value = "Task verification ke liye jama ho gaya hai! Shukriya."
@@ -292,10 +304,10 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
     }
 
     // --- AdMob Earning Actions ---
-    fun watchAdMobAd(adType: String) {
+    fun watchAdMobAd(adType: String, rewardAmount: Double? = null) {
         _isProcessing.value = true
         viewModelScope.launch {
-            val result = repository.watchAd(adType)
+            val result = repository.watchAd(adType, rewardAmount)
             _isProcessing.value = false
             result.onSuccess { reward ->
                 _currentUser.value = repository.currentUser
@@ -433,6 +445,73 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
                 _toastMessage.value = if (ban) "User ko BAN kar diya gaya hai." else "User ko UNBAN kar diya gaya."
             }.onFailure {
                 _toastMessage.value = it.message ?: "Action complete nahi ho saki."
+            }
+        }
+    }
+
+    fun buySubscriptionTier(tier: String) {
+        _isProcessing.value = true
+        viewModelScope.launch {
+            val result = repository.buySubscription(tier)
+            _isProcessing.value = false
+            result.onSuccess {
+                _currentUser.value = repository.currentUser
+                _toastMessage.value = "Mubarak! Premium $tier Package kamyabi se active ho chuka hai."
+            }.onFailure {
+                _toastMessage.value = it.message ?: "Package purchase nahi ho saka."
+            }
+        }
+    }
+
+    fun updateProfilePicture(uri: String) {
+        _isProcessing.value = true
+        viewModelScope.launch {
+            val result = repository.updateProfilePic(uri)
+            _isProcessing.value = false
+            result.onSuccess {
+                _currentUser.value = repository.currentUser
+                _toastMessage.value = "Profile picture kamyabi se tabdeel ho chuki hai!"
+            }.onFailure {
+                _toastMessage.value = it.message ?: "Profile picture update nahi ho saki."
+            }
+        }
+    }
+
+    fun linkNewPaymentAccount(bankName: String, accountTitle: String, accountNumber: String, iban: String) {
+        _isProcessing.value = true
+        viewModelScope.launch {
+            val result = repository.linkPaymentAccount(bankName, accountTitle, accountNumber, iban)
+            _isProcessing.value = false
+            result.onSuccess {
+                _toastMessage.value = "Naya Payment Account kamyabi se link ho gaya!"
+            }.onFailure {
+                _toastMessage.value = it.message ?: "Account link karne mein masla aya."
+            }
+        }
+    }
+
+    fun changePaymentAccountLock(userId: String, lock: Boolean) {
+        _isProcessing.value = true
+        viewModelScope.launch {
+            val result = repository.lockPaymentDetails(userId, lock)
+            _isProcessing.value = false
+            result.onSuccess {
+                _toastMessage.value = if (lock) "Payment accounts locked!" else "Payment accounts unlocked!"
+            }.onFailure {
+                _toastMessage.value = it.message ?: "Lock change nahi ho saka."
+            }
+        }
+    }
+
+    fun removeSavedPaymentAccount(accountId: String) {
+        _isProcessing.value = true
+        viewModelScope.launch {
+            val result = repository.deleteSavedAccount(accountId)
+            _isProcessing.value = false
+            result.onSuccess {
+                _toastMessage.value = "Account kamyabi se delete ho gaya."
+            }.onFailure {
+                _toastMessage.value = it.message ?: "Account delete nahi ho saka."
             }
         }
     }
