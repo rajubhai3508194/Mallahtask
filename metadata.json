@@ -1,0 +1,6 @@
+{
+  "name": "TaskMallah",
+  "description": "Real micro-task and advertising marketplace in Pakistan. Earn PKR by completing tasks or create your own campaigns.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
