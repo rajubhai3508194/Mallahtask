@@ -666,7 +666,7 @@ fun OTPVerifyScreen(viewModel: TaskMallahViewModel, onVerify: () -> Unit) {
         Button(
             onClick = {
                 if (code == "786786" || code.length == 6) {
-                    onVerify()
+                    viewModel.verifyOtpAndRegister(code)
                 }
             },
             modifier = Modifier
