@@ -319,64 +319,16 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
         }
 
         val allUsersFlow = dao.getAllUsersFlow().firstOrNull() ?: emptyList()
-       val emailExists = allUsersFlow.any { it.email.lowercase() == email.lowercase() }
-val phoneExists = allUsersFlow.any { it.phone == phone }
-
-if (emailExists && phoneExists) {
-    return Result.failure(Exception("⚠️ Yeh Email aur Mobile Number dono pehle se registered hain. Bara-e-meherbani Login karein."))
-}
-if (emailExists) {
-    return Result.failure(Exception("⚠️ Yeh Email address pehle se registered hai. Kya aap Login karna chahte hain?"))
-}
-if (phoneExists) {
-    return Result.failure(Exception("⚠️ Yeh Mobile Number pehle se registered hai. Kya aap Login karna chahte hain?"))
-}
-if (allUsersFlow.any { it.cnicHash == cnicHash }) {
-    return Result.failure(Exception("⚠️ Yeh CNIC pehle se register hai. Ek CNIC par sirf ek account ban sakta hai."))
-}
-
-// Firebase Auth email check
-if (auth != null) {
-    try {
-        val methods = Tasks.await(auth!!.fetchSignInMethodsForEmail(email))
-        if (methods.signInMethods?.isNotEmpty() == true) {
-            return Result.failure(Exception("⚠️ Yeh Email Firebase par pehle se registered hai. Bara-e-meherbani Login karein."))
+        if (allUsersFlow.any { it.cnicHash == cnicHash }) {
+            return Result.failure(Exception("Yeh CNIC pehle se register hai. Ek CNIC par ek hi account ban sakta hai."))
         }
-    } catch (e: Exception) {
-        Log.w("FirebaseCheck", "Firebase email check warning: ${e.message}")
-    }
-}
-
-// Firestore email aur phone check
-if (firestore != null) {
-    try {
-        val emailQuery = Tasks.await(
-            firestore!!.collection("users")
-                .whereEqualTo("email", email.lowercase())
-                .get()
-        )
-        val phoneQuery = Tasks.await(
-            firestore!!.collection("users")
-                .whereEqualTo("phone", phone)
-                .get()
-        )
-
-        val fsEmailExists = emailQuery.documents.isNotEmpty()
-        val fsPhoneExists = phoneQuery.documents.isNotEmpty()
-
-        if (fsEmailExists && fsPhoneExists) {
-            return Result.failure(Exception("⚠️ Yeh Email aur Mobile Number dono pehle se registered hain. Bara-e-meherbani Login karein."))
+        if (allUsersFlow.any { it.email.lowercase() == email.lowercase() }) {
+            return Result.failure(Exception("Yeh Email pehle se register hai."))
         }
-        if (fsEmailExists) {
-            return Result.failure(Exception("⚠️ Yeh Email address pehle se registered hai. Kya aap Login karna chahte hain?"))
+        if (allUsersFlow.any { it.phone == phone }) {
+            return Result.failure(Exception("Yeh Mobile Number pehle se register hai."))
         }
-        if (fsPhoneExists) {
-            return Result.failure(Exception("⚠️ Yeh Mobile Number pehle se registered hai. Kya aap Login karna chahte hain?"))
-        }
-    } catch (e: Exception) {
-        Log.w("FirebaseCheck", "Firestore duplicate check warning: ${e.message}")
-    }
-}
+
         var referredByUserId: String? = null
         if (!referralCode.isNullOrBlank()) {
             val referrer = dao.getUserByReferralCode(referralCode.trim().uppercase())
@@ -439,54 +391,62 @@ if (firestore != null) {
 
         if (auth != null && firestore != null) {
             try {
-                val finalUser = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-    val authResult = Tasks.await(auth!!.createUserWithEmailAndPassword(user.email, pendingPassword))
-    val firebaseUid = authResult.user?.uid ?: user.id
-    val innerFinalUser = user.copy(id = firebaseUid)
+                val authResult = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    Tasks.await(auth!!.createUserWithEmailAndPassword(user.email, pendingPassword))
+                }
+                val firebaseUid = authResult.user?.uid ?: user.id
+                val finalUser = user.copy(id = firebaseUid)
 
-    val userDoc = hashMapOf(
-        "name" to innerFinalUser.name,
-        "email" to innerFinalUser.email,
-        "phone" to innerFinalUser.phone,
-        "cnicHash" to innerFinalUser.cnicHash,
-        "role" to innerFinalUser.role,
-        "walletBalancePkr" to 0.0,
-        "totalEarnedPkr" to 0.0,
-        "totalWithdrawnPkr" to 0.0,
-        "totalReferralPkr" to 0.0,
-        "referralCode" to innerFinalUser.referralCode,
-        "referredBy" to innerFinalUser.referredBy,
-        "kycStatus" to innerFinalUser.kycStatus,
-        "accountLevel" to innerFinalUser.accountLevel,
-        "isBanned" to innerFinalUser.isBanned,
-        "createdAt" to innerFinalUser.createdAt
-    )
-    Tasks.await(firestore!!.collection("users").document(firebaseUid).set(userDoc))
+                val userDoc = hashMapOf(
+                    "name" to finalUser.name,
+                    "email" to finalUser.email,
+                    "phone" to finalUser.phone,
+                    "cnicHash" to finalUser.cnicHash,
+                    "role" to finalUser.role,
+                    "walletBalancePkr" to 0.0,
+                    "totalEarnedPkr" to 0.0,
+                    "totalWithdrawnPkr" to 0.0,
+                    "totalReferralPkr" to 0.0,
+                    "referralCode" to finalUser.referralCode,
+                    "referredBy" to finalUser.referredBy,
+                    "kycStatus" to finalUser.kycStatus,
+                    "accountLevel" to finalUser.accountLevel,
+                    "isBanned" to finalUser.isBanned,
+                    "createdAt" to finalUser.createdAt
+                )
 
-    val deviceDoc = hashMapOf(
-        "uuid_hash" to pendingDeviceHash,
-        "user_id" to firebaseUid,
-        "registered_at" to System.currentTimeMillis()
-    )
-    Tasks.await(firestore!!.collection("device_registry").document(pendingDeviceHash).set(deviceDoc))
+                Tasks.await(firestore!!.collection("users").document(firebaseUid).set(userDoc))
 
-    val cnicDoc = hashMapOf(
-        "cnic_hash" to pendingCnicHash,
-        "user_id" to firebaseUid,
-        "registered_at" to System.currentTimeMillis()
-    )
-    Tasks.await(firestore!!.collection("cnic_registry").document(pendingCnicHash).set(cnicDoc))
+                val deviceDoc = hashMapOf(
+                    "uuid_hash" to pendingDeviceHash,
+                    "user_id" to firebaseUid,
+                    "registered_at" to System.currentTimeMillis()
+                )
+                Tasks.await(firestore!!.collection("device_registry").document(pendingDeviceHash).set(deviceDoc))
 
-    innerFinalUser
-}
+                val cnicDoc = hashMapOf(
+                    "cnic_hash" to pendingCnicHash,
+                    "user_id" to firebaseUid,
+                    "registered_at" to System.currentTimeMillis()
+                )
+                Tasks.await(firestore!!.collection("cnic_registry").document(pendingCnicHash).set(cnicDoc))
 
-dao.insertUser(finalUser)
-currentUser = finalUser
+                dao.insertUser(finalUser)
+                currentUser = finalUser
 
-pendingUser = null
-generatedOtp = null
+                pendingUser = null
+                generatedOtp = null
 
-return Result.success(finalUser)
+                return Result.success(finalUser)
+            } catch (e: Exception) {
+                return Result.failure(Exception("Firebase registration fail ho gayi: ${e.message}"))
+            }
+        } else {
+            dao.insertUser(user)
+            currentUser = user
+            pendingUser = null
+            generatedOtp = null
+            return Result.success(user)
         }
     }
 
