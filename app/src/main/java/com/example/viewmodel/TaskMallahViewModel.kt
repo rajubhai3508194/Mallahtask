@@ -175,7 +175,7 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
         viewModelScope.launch {
             val result = repository.signup(name, email, phone, passwordPlain, cnic, referralCode)
             _isProcessing.value = false
-            result.onSuccess { user ->
+            result.onSuccess {
                 _isOtpRequired.value = true
                 _toastMessage.value = "Tasdeeq ke liye OTP Code bhej diya gaya hai."
             }.onFailure { exception ->
@@ -292,7 +292,6 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
             _isProcessing.value = false
             result.onSuccess {
                 _toastMessage.value = "Task verification ke liye jama ho gaya hai! Shukriya."
-                // Refresh completion status
                 val task = _selectedTask.value
                 if (task != null) {
                     _selectedTaskCompletion.value = repository.getCompletionForTask(task.id)
@@ -368,7 +367,6 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
             }
         }
     }
-
 
     // --- Super Admin Moderation Actions ---
     fun approveOrRejectTaskCompletion(completionId: String, approve: Boolean, reason: String? = null) {
@@ -458,7 +456,7 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
                 _currentUser.value = repository.currentUser
                 _toastMessage.value = "Mubarak! Premium $tier Package kamyabi se active ho chuka hai."
             }.onFailure {
-                _toastMessage.value = it.message ?: "Package purchase nahi ho saka."
+                _toastMessage.value = it.message ?: "Package purchase nahi ho saca."
             }
         }
     }
@@ -511,18 +509,18 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
             result.onSuccess {
                 _toastMessage.value = "Account kamyabi se delete ho gaya."
             }.onFailure {
-                _toastMessage.value = it.message ?: "Account delete nahi ho saka."
+                _toastMessage.value = it.message ?: "Account delete nahi ho saca."
             }
         }
     }
 }
 
 class ViewModelFactory(private val repository: TaskMallahRepository) : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(TaskMallahViewModel::class.java)) {
-            @Suppress("UNCHECKED_CAST")
             return TaskMallahViewModel(repository) as T
         }
-        throw IllegalArgumentException("Unknown ViewModel class")
+        throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
     }
 }
