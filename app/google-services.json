@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "694842203392",
+    "project_id": "taskmallah-prod",
+    "storage_bucket": "taskmallah-prod.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:694842203392:android:d6c39abc6a9f2964c4e7e5",
+        "android_client_info": {
+          "package_name": "com.aistudio.taskmallah.pkraun"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "694842203392-kd8rk45ctr11vilhj17bpjr57c5qd36p.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBo9wjN-BFaAL_lBuvMALTRdxkB9lz2rMg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "694842203392-kd8rk45ctr11vilhj17bpjr57c5qd36p.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
