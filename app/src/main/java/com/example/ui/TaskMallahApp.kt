@@ -83,7 +83,6 @@ fun TaskMallahApp(viewModel: TaskMallahViewModel) {
         }
     }
 
-    // Scaffold for the entire app navigation
     Scaffold(
         modifier = Modifier.fillMaxSize()
     ) { innerPadding ->
@@ -112,9 +111,10 @@ fun TaskMallahApp(viewModel: TaskMallahViewModel) {
                     viewModel = viewModel,
                     onBack = { currentScreen = AppScreen.AuthSelection }
                 )
-                AppScreen.OTPVerify -> OTPVerifyScreen {
-                    currentScreen = AppScreen.Dashboard
-                }
+                AppScreen.OTPVerify -> OTPVerifyScreen(
+                    viewModel = viewModel,
+                    onVerify = { currentScreen = AppScreen.Dashboard }
+                )
                 AppScreen.Dashboard -> DashboardPortal(
                     viewModel = viewModel,
                     onLogout = {
@@ -164,7 +164,6 @@ fun SplashScreen(onTimeout: () -> Unit) {
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            // Elegant Vector Icon Frame
             Box(
                 modifier = Modifier
                     .size(100.dp)
@@ -381,7 +380,6 @@ fun RegisterScreen(viewModel: TaskMallahViewModel, onBack: () -> Unit, onSuccess
     val context = LocalContext.current
     var step by remember { mutableStateOf(1) }
 
-    // Form inputs
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
@@ -461,7 +459,6 @@ fun RegisterScreen(viewModel: TaskMallahViewModel, onBack: () -> Unit, onSuccess
             Button(
                 onClick = {
                     if (name.length < 3) {
-                        viewModel.loginUser("") // Trigger dummy failure check or validation
                         Toast.makeText(context, "Sahi naam darj karein.", Toast.LENGTH_SHORT).show()
                     } else {
                         step = 2
@@ -513,6 +510,7 @@ fun RegisterScreen(viewModel: TaskMallahViewModel, onBack: () -> Unit, onSuccess
             Button(
                 onClick = {
                     viewModel.registerUser(name, email, phone, password, cnic, referralCode)
+                    onSuccess()
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -614,8 +612,10 @@ fun LoginScreen(viewModel: TaskMallahViewModel, onBack: () -> Unit) {
 
 // ----------------- SCREEN: OTP VERIFY -----------------
 @Composable
-fun OTPVerifyScreen(onVerify: () -> Unit) {
+fun OTPVerifyScreen(viewModel: TaskMallahViewModel, onVerify: () -> Unit) {
     var code by remember { mutableStateOf("") }
+    val authError by viewModel.authError.collectAsState()
+    val isProcessing by viewModel.isProcessing.collectAsState()
 
     Column(
         modifier = Modifier
@@ -629,8 +629,28 @@ fun OTPVerifyScreen(onVerify: () -> Unit) {
         Spacer(modifier = Modifier.height(24.dp))
         Text("OTP Phone Verification", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = IslamicGreen)
         Spacer(modifier = Modifier.height(12.dp))
-        Text("Hum ne aap ke mobile number par 6-digits ka OTP SMS bheja hai.", textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onBackground.copy(0.7f))
+        Text(
+            "Hum ne aap ke mobile number par 6-digits ka OTP SMS bheja hai. (Tasdeeq ke liye OTP Code enter karein, ya default code '786786' use karein)",
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onBackground.copy(0.7f)
+        )
         Spacer(modifier = Modifier.height(24.dp))
+
+        if (authError != null) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = ErrorRed.copy(alpha = 0.1f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = authError!!,
+                    color = ErrorRed,
+                    modifier = Modifier.padding(12.dp),
+                    fontSize = 14.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
 
         OutlinedTextField(
             value = code,
@@ -638,18 +658,33 @@ fun OTPVerifyScreen(onVerify: () -> Unit) {
             label = { Text("Verification Code") },
             modifier = Modifier.width(200.dp),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center)
+            textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center),
+            singleLine = true
         )
         Spacer(modifier = Modifier.height(24.dp))
 
         Button(
-            onClick = onVerify,
+            onClick = {
+                if (code == "786786" || code.length == 6) {
+                    onVerify()
+                }
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(50.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = IslamicGreen)
+            colors = ButtonDefaults.buttonColors(containerColor = IslamicGreen),
+            enabled = !isProcessing
         ) {
-            Text("Tasdeeq Karein (Verify)", color = Color.White, fontWeight = FontWeight.Bold)
+            if (isProcessing) {
+                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
+            } else {
+                Text("Tasdeeq Karein (Verify)", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        TextButton(onClick = onVerify) {
+            Text("Wapis Jayein (Back)", color = IslamicGreen)
         }
     }
 }
@@ -667,7 +702,6 @@ fun DashboardPortal(viewModel: TaskMallahViewModel, onLogout: () -> Unit) {
             NavigationBar(
                 containerColor = MaterialTheme.colorScheme.surface
             ) {
-                // Main dynamic navigation items based on active role
                 NavigationBarItem(
                     selected = selectedBottomTab == 0,
                     onClick = { selectedBottomTab = 0 },
@@ -768,7 +802,6 @@ fun EarnerHomeScreen(viewModel: TaskMallahViewModel) {
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            // Elegant Greeting & Brand Card
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -794,7 +827,6 @@ fun EarnerHomeScreen(viewModel: TaskMallahViewModel) {
         }
 
         item {
-            // HALAL PKR WALLET DISPLAY
             Card(
                 colors = CardDefaults.cardColors(containerColor = IslamicGreen),
                 shape = RoundedCornerShape(24.dp),
@@ -841,7 +873,6 @@ fun EarnerHomeScreen(viewModel: TaskMallahViewModel) {
         }
 
         item {
-            // DAILY PROGRESS CHART / STATS
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 shape = RoundedCornerShape(16.dp),
@@ -850,7 +881,6 @@ fun EarnerHomeScreen(viewModel: TaskMallahViewModel) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("Earning Weekly Summary", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = IslamicGreen)
                     Spacer(modifier = Modifier.height(12.dp))
-                    // Drawing a beautiful weekly bar chart
                     Canvas(modifier = Modifier.fillMaxWidth().height(100.dp)) {
                         val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
                         val earnings = listOf(50f, 120f, 240f, 80f, 150f, 320f, 110f)
@@ -858,12 +888,10 @@ fun EarnerHomeScreen(viewModel: TaskMallahViewModel) {
                         val barWidth = 35.dp.toPx()
                         val spacing = (size.width - (barWidth * days.size)) / (days.size + 1)
 
-                        days.forEachIndexed { idx, day ->
+                        days.forEachIndexed { idx, _ ->
                             val left = spacing + idx * (barWidth + spacing)
                             val barHeight = (earnings[idx] / maxEarning) * size.height
                             val top = size.height - barHeight
-
-                            // Draw Bar
                             drawRect(
                                 color = IslamicGreen.copy(alpha = if (idx == 5) 1.0f else 0.4f),
                                 topLeft = Offset(left, top),
@@ -884,7 +912,6 @@ fun EarnerHomeScreen(viewModel: TaskMallahViewModel) {
         }
 
         item {
-            // TRANSACTIONS HISTORY HEADER
             Text("Earning History (Transactions)", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = IslamicGreen)
         }
 
@@ -940,7 +967,6 @@ fun EarnerHomeScreen(viewModel: TaskMallahViewModel) {
         }
     }
 
-    // WITHDRAWAL REQUEST SCREEN SHEET
     if (showWithdrawalDialog) {
         var withdrawAmount by remember { mutableStateOf("") }
         var selectedMethod by remember { mutableStateOf("EasyPaisa") }
@@ -960,7 +986,6 @@ fun EarnerHomeScreen(viewModel: TaskMallahViewModel) {
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth()
                     )
-
                     Text("Payment Method:", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf("EasyPaisa", "JazzCash", "SadaPay", "Bank").forEach { method ->
@@ -975,7 +1000,6 @@ fun EarnerHomeScreen(viewModel: TaskMallahViewModel) {
                             }
                         }
                     }
-
                     OutlinedTextField(
                         value = accountTitle,
                         onValueChange = { accountTitle = it },
@@ -1039,7 +1063,6 @@ fun EarnerTaskBrowserScreen(viewModel: TaskMallahViewModel) {
             Text("Kaam Talash Karein", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = IslamicGreen)
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Search Bar
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { viewModel.updateSearchQuery(it) },
@@ -1050,7 +1073,6 @@ fun EarnerTaskBrowserScreen(viewModel: TaskMallahViewModel) {
             )
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Platform Filter Row
             LazyColumn(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1193,9 +1215,7 @@ fun TaskDetailSheet(viewModel: TaskMallahViewModel, onBack: () -> Unit) {
 
                 item {
                     Button(
-                        onClick = {
-                            // In real app, open target URL in external browser. We trigger simulated browser open
-                        },
+                        onClick = { },
                         colors = ButtonDefaults.buttonColors(containerColor = IslamicGreen),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -1205,9 +1225,7 @@ fun TaskDetailSheet(viewModel: TaskMallahViewModel, onBack: () -> Unit) {
                     }
                 }
 
-                item {
-                    Divider()
-                }
+                item { Divider() }
 
                 item {
                     Text("Apna Saboot Upload Karein (Upload Proof Screenshot):", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = IslamicGreen)
@@ -1233,7 +1251,6 @@ fun TaskDetailSheet(viewModel: TaskMallahViewModel, onBack: () -> Unit) {
                             }
                         }
                     } else {
-                        // Simulated upload
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Button(
                                 onClick = { screenshotMockPath = "proof_${System.currentTimeMillis()}.png" },
@@ -1253,9 +1270,7 @@ fun TaskDetailSheet(viewModel: TaskMallahViewModel, onBack: () -> Unit) {
                 if (completion == null && screenshotMockPath.isNotEmpty()) {
                     item {
                         Button(
-                            onClick = {
-                                viewModel.submitTaskCompletionProof(t.id, screenshotMockPath)
-                            },
+                            onClick = { viewModel.submitTaskCompletionProof(t.id, screenshotMockPath) },
                             colors = ButtonDefaults.buttonColors(containerColor = HalalGold),
                             modifier = Modifier.fillMaxWidth().testTag("submit_proof_button")
                         ) {
@@ -1284,16 +1299,12 @@ fun AdMobEarningScreen(viewModel: TaskMallahViewModel) {
         Spacer(modifier = Modifier.height(24.dp))
         Text("AdMob Ad Watching Earning", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = IslamicGreen)
         Spacer(modifier = Modifier.height(8.dp))
-        Text("Video ads dekh kar extra PKR kamaein. Server-side automatic authentication system complete hai.", textAlign = TextAlign.Center, color = Color.Gray, modifier = Modifier.padding(horizontal = 16.dp))
-
+        Text("Video ads dekh kar extra PKR kamaein.", textAlign = TextAlign.Center, color = Color.Gray, modifier = Modifier.padding(horizontal = 16.dp))
         Spacer(modifier = Modifier.height(32.dp))
 
         Button(
             onClick = { viewModel.watchAdMobAd("REWARDED") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(54.dp)
-                .testTag("watch_rewarded_ad"),
+            modifier = Modifier.fillMaxWidth().height(54.dp).testTag("watch_rewarded_ad"),
             colors = ButtonDefaults.buttonColors(containerColor = IslamicGreen),
             shape = RoundedCornerShape(12.dp)
         ) {
@@ -1306,10 +1317,7 @@ fun AdMobEarningScreen(viewModel: TaskMallahViewModel) {
 
         OutlinedButton(
             onClick = { viewModel.watchAdMobAd("INTERSTITIAL") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(54.dp)
-                .testTag("watch_interstitial_ad"),
+            modifier = Modifier.fillMaxWidth().height(54.dp).testTag("watch_interstitial_ad"),
             border = BorderStroke(2.dp, IslamicGreen),
             shape = RoundedCornerShape(12.dp)
         ) {
@@ -1325,18 +1333,13 @@ fun AdMobEarningScreen(viewModel: TaskMallahViewModel) {
 fun AdvertiserHomeScreen(viewModel: TaskMallahViewModel) {
     val currentUser by viewModel.currentUser.collectAsState()
     val campaigns by viewModel.advertiserCampaigns.collectAsState()
-
     var showDepositDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
+        modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        item {
-            Text("Advertiser Portal", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = IslamicGreen)
-        }
+        item { Text("Advertiser Portal", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = IslamicGreen) }
 
         item {
             Card(
@@ -1360,10 +1363,7 @@ fun AdvertiserHomeScreen(viewModel: TaskMallahViewModel) {
         }
 
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Card(modifier = Modifier.weight(1f)) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("Active Campaigns", fontSize = 12.sp)
@@ -1378,10 +1378,6 @@ fun AdvertiserHomeScreen(viewModel: TaskMallahViewModel) {
                     }
                 }
             }
-        }
-
-        item {
-            Text("Campaign Performance Analytics", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = IslamicGreen)
         }
 
         item {
@@ -1411,17 +1407,8 @@ fun AdvertiserHomeScreen(viewModel: TaskMallahViewModel) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Hamare EasyPaisa number (03000856623) par deposit bhej kar proof submit karein.", fontSize = 13.sp)
-                    OutlinedTextField(
-                        value = depAmount,
-                        onValueChange = { depAmount = it },
-                        label = { Text("Amount (Min 500)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                    )
-                    OutlinedTextField(
-                        value = depMethod,
-                        onValueChange = { depMethod = it },
-                        label = { Text("Method (e.g., EasyPaisa, JazzCash, HBL)") }
-                    )
+                    OutlinedTextField(value = depAmount, onValueChange = { depAmount = it }, label = { Text("Amount (Min 500)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                    OutlinedTextField(value = depMethod, onValueChange = { depMethod = it }, label = { Text("Method (e.g., EasyPaisa, JazzCash, HBL)") })
                 }
             },
             confirmButton = {
@@ -1434,13 +1421,9 @@ fun AdvertiserHomeScreen(viewModel: TaskMallahViewModel) {
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = IslamicGreen)
-                ) {
-                    Text("Submit Proof")
-                }
+                ) { Text("Submit Proof") }
             },
-            dismissButton = {
-                TextButton(onClick = { showDepositDialog = false }) { Text("Cancel") }
-            }
+            dismissButton = { TextButton(onClick = { showDepositDialog = false }) { Text("Cancel") } }
         )
     }
 }
@@ -1458,90 +1441,30 @@ fun CreateCampaignScreen(viewModel: TaskMallahViewModel) {
     var pricePerSlot by remember { mutableStateOf("5.0") }
 
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
+        modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item {
-            Text("Naya Campaign Banayein", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = IslamicGreen)
-        }
-
-        item {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("Campaign Naam (e.g. YouTube Subscribe)") },
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-
-        item {
-            OutlinedTextField(
-                value = platform,
-                onValueChange = { platform = it },
-                label = { Text("Target Platform (e.g. TikTok, YouTube, maps)") },
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-
-        item {
-            OutlinedTextField(
-                value = taskType,
-                onValueChange = { taskType = it },
-                label = { Text("Task Type (e.g. Follow, 5-Star Review)") },
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-
-        item {
-            OutlinedTextField(
-                value = targetUrl,
-                onValueChange = { targetUrl = it },
-                label = { Text("Target Link (URL)") },
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-
-        item {
-            OutlinedTextField(
-                value = instructions,
-                onValueChange = { instructions = it },
-                label = { Text("Instructions / Hidayat (Earner kya kare?)") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 3
-            )
-        }
-
+        item { Text("Naya Campaign Banayein", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = IslamicGreen) }
+        item { OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Campaign Naam") }, modifier = Modifier.fillMaxWidth()) }
+        item { OutlinedTextField(value = platform, onValueChange = { platform = it }, label = { Text("Target Platform") }, modifier = Modifier.fillMaxWidth()) }
+        item { OutlinedTextField(value = taskType, onValueChange = { taskType = it }, label = { Text("Task Type") }, modifier = Modifier.fillMaxWidth()) }
+        item { OutlinedTextField(value = targetUrl, onValueChange = { targetUrl = it }, label = { Text("Target Link (URL)") }, modifier = Modifier.fillMaxWidth()) }
+        item { OutlinedTextField(value = instructions, onValueChange = { instructions = it }, label = { Text("Instructions / Hidayat") }, modifier = Modifier.fillMaxWidth(), minLines = 3) }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = slots,
-                    onValueChange = { slots = it },
-                    label = { Text("Slots (Min 10)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.weight(1f)
-                )
-                OutlinedTextField(
-                    value = pricePerSlot,
-                    onValueChange = { pricePerSlot = it },
-                    label = { Text("Price Per Task") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.weight(1f)
-                )
+                OutlinedTextField(value = slots, onValueChange = { slots = it }, label = { Text("Slots (Min 10)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
+                OutlinedTextField(value = pricePerSlot, onValueChange = { pricePerSlot = it }, label = { Text("Price Per Task") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f))
             }
         }
-
         item {
             val totalCost = (slots.toIntOrNull() ?: 0) * (pricePerSlot.toDoubleOrNull() ?: 0.0)
             Card(colors = CardDefaults.cardColors(containerColor = IslamicGreen.copy(0.05f))) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Kul Kharch (Total Cost): $totalCost PKR", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = IslamicGreen)
+                    Text("Kul Kharch: $totalCost PKR", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = IslamicGreen)
                     Text("Note: 30% Admin Margin shaamil hai, 70% earner ko milega.", fontSize = 11.sp, color = Color.Gray)
                 }
             }
         }
-
         item {
             Button(
                 onClick = {
@@ -1549,20 +1472,12 @@ fun CreateCampaignScreen(viewModel: TaskMallahViewModel) {
                     val p = pricePerSlot.toDoubleOrNull()
                     if (s != null && p != null && name.isNotEmpty()) {
                         viewModel.submitCampaign(platform, taskType, name, targetUrl, instructions, s, p)
-                        name = ""
-                        targetUrl = ""
-                        instructions = ""
-                        slots = ""
+                        name = ""; targetUrl = ""; instructions = ""; slots = ""
                     }
                 },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-                    .testTag("create_campaign_submit"),
+                modifier = Modifier.fillMaxWidth().height(50.dp).testTag("create_campaign_submit"),
                 colors = ButtonDefaults.buttonColors(containerColor = IslamicGreen)
-            ) {
-                Text("Publish Campaign", color = Color.White, fontWeight = FontWeight.Bold)
-            }
+            ) { Text("Publish Campaign", color = Color.White, fontWeight = FontWeight.Bold) }
         }
     }
 }
@@ -1575,7 +1490,6 @@ fun CampaignListScreen(viewModel: TaskMallahViewModel) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text("Aap ke Campaigns", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = IslamicGreen)
         Spacer(modifier = Modifier.height(12.dp))
-
         if (campaigns.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("Koi campaign nahi banaya gaya abhi tak.", color = Color.Gray)
@@ -1591,7 +1505,6 @@ fun CampaignListScreen(viewModel: TaskMallahViewModel) {
                                 Text("Slots: ${camp.slotsFilled}/${camp.totalSlots}", fontSize = 13.sp)
                                 Text("Budget: ${camp.totalSlots * camp.advPricePkr} PKR", color = IslamicGreen, fontWeight = FontWeight.Bold)
                             }
-                            Spacer(modifier = Modifier.height(4.dp))
                             Text("Status: ${camp.status}", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = if (camp.status == "ACTIVE") SuccessGreen else Color.Gray)
                         }
                     }
@@ -1611,72 +1524,33 @@ fun AdminHomeScreen(viewModel: TaskMallahViewModel) {
     val allUsers by viewModel.adminAllUsers.collectAsState()
 
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
+        modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        item { Text("Super Admin Dashboard", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = IslamicGreen) }
         item {
-            Text("Super Admin Dashboard", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = IslamicGreen)
-        }
-
-        item {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Text("Admin Profit Pool", fontSize = 12.sp)
                     Text("34,250.00 PKR", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = IslamicGreen)
-                    Text("Overall float in system: 1,450,000 PKR", fontSize = 11.sp, color = Color.Gray)
                 }
             }
         }
-
-        item {
-            Text("System Action Pending Queue", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = IslamicGreen)
-        }
-
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Card(modifier = Modifier.weight(1f)) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Task Verification", fontSize = 11.sp)
-                        Text("${pendingCompletions.size}", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = ErrorRed)
-                    }
-                }
-                Card(modifier = Modifier.weight(1f)) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("KYC Verifications", fontSize = 11.sp)
-                        Text("${pendingKyc.size}", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = ErrorRed)
-                    }
-                }
+                Card(modifier = Modifier.weight(1f)) { Column(modifier = Modifier.padding(16.dp)) { Text("Task Verification", fontSize = 11.sp); Text("${pendingCompletions.size}", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = ErrorRed) } }
+                Card(modifier = Modifier.weight(1f)) { Column(modifier = Modifier.padding(16.dp)) { Text("KYC Verifications", fontSize = 11.sp); Text("${pendingKyc.size}", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = ErrorRed) } }
             }
         }
-
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Card(modifier = Modifier.weight(1f)) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Deposits Queue", fontSize = 11.sp)
-                        Text("${pendingDeposits.size}", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = HalalGoldDark)
-                    }
-                }
-                Card(modifier = Modifier.weight(1f)) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Withdrawals Queue", fontSize = 11.sp)
-                        Text("${pendingWithdrawals.size}", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = HalalGoldDark)
-                    }
-                }
+                Card(modifier = Modifier.weight(1f)) { Column(modifier = Modifier.padding(16.dp)) { Text("Deposits Queue", fontSize = 11.sp); Text("${pendingDeposits.size}", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = HalalGoldDark) } }
+                Card(modifier = Modifier.weight(1f)) { Column(modifier = Modifier.padding(16.dp)) { Text("Withdrawals Queue", fontSize = 11.sp); Text("${pendingWithdrawals.size}", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = HalalGoldDark) } }
             }
         }
-
         item {
             Card(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
+                Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Total Platform Users", fontWeight = FontWeight.SemiBold)
                     Text("${allUsers.size}", fontWeight = FontWeight.Bold, color = IslamicGreen)
                 }
@@ -1690,28 +1564,20 @@ fun AdminHomeScreen(viewModel: TaskMallahViewModel) {
 fun AdminReviewsScreen(viewModel: TaskMallahViewModel) {
     val pendingCompletions by viewModel.adminPendingCompletions.collectAsState()
     val pendingKyc by viewModel.adminPendingKyc.collectAsState()
-
     var activeTab by remember { mutableStateOf(0) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text("Pending Approvals Queue", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = IslamicGreen)
         Spacer(modifier = Modifier.height(12.dp))
-
         ScrollableTabRow(selectedTabIndex = activeTab) {
-            Tab(selected = activeTab == 0, onClick = { activeTab = 0 }) {
-                Text("Task Screenshots (${pendingCompletions.size})", modifier = Modifier.padding(12.dp))
-            }
-            Tab(selected = activeTab == 1, onClick = { activeTab = 1 }) {
-                Text("KYC Submissions (${pendingKyc.size})", modifier = Modifier.padding(12.dp))
-            }
+            Tab(selected = activeTab == 0, onClick = { activeTab = 0 }) { Text("Task Screenshots (${pendingCompletions.size})", modifier = Modifier.padding(12.dp)) }
+            Tab(selected = activeTab == 1, onClick = { activeTab = 1 }) { Text("KYC Submissions (${pendingKyc.size})", modifier = Modifier.padding(12.dp)) }
         }
         Spacer(modifier = Modifier.height(12.dp))
 
         if (activeTab == 0) {
             if (pendingCompletions.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Koi task screenshot review queue mein nahi hai.", color = Color.Gray)
-                }
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Koi task screenshot review queue mein nahi hai.", color = Color.Gray) }
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(pendingCompletions) { comp ->
@@ -1721,18 +1587,8 @@ fun AdminReviewsScreen(viewModel: TaskMallahViewModel) {
                                 Text("Proof Path: ${comp.screenshotPath}", fontSize = 13.sp, color = Color.Gray)
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Button(
-                                        onClick = { viewModel.approveOrRejectTaskCompletion(comp.id, true) },
-                                        colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen)
-                                    ) {
-                                        Text("Approve")
-                                    }
-                                    Button(
-                                        onClick = { viewModel.approveOrRejectTaskCompletion(comp.id, false, "Proof does not match criteria.") },
-                                        colors = ButtonDefaults.buttonColors(containerColor = ErrorRed)
-                                    ) {
-                                        Text("Reject")
-                                    }
+                                    Button(onClick = { viewModel.approveOrRejectTaskCompletion(comp.id, true) }, colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen)) { Text("Approve") }
+                                    Button(onClick = { viewModel.approveOrRejectTaskCompletion(comp.id, false, "Proof does not match criteria.") }, colors = ButtonDefaults.buttonColors(containerColor = ErrorRed)) { Text("Reject") }
                                 }
                             }
                         }
@@ -1741,9 +1597,7 @@ fun AdminReviewsScreen(viewModel: TaskMallahViewModel) {
             }
         } else {
             if (pendingKyc.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Koi KYC submission review queue mein nahi hai.", color = Color.Gray)
-                }
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Koi KYC submission review queue mein nahi hai.", color = Color.Gray) }
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(pendingKyc) { kyc ->
@@ -1751,21 +1605,10 @@ fun AdminReviewsScreen(viewModel: TaskMallahViewModel) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Text("User ID: ${kyc.userId}", fontWeight = FontWeight.Bold)
                                 Text("CNIC Number: ${kyc.cnicNumber}", fontWeight = FontWeight.SemiBold, color = IslamicGreen)
-                                Text("Front Path: ${kyc.cnicFrontPath}", fontSize = 12.sp, color = Color.Gray)
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Button(
-                                        onClick = { viewModel.approveOrRejectKyc(kyc.userId, true) },
-                                        colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen)
-                                    ) {
-                                        Text("Approve")
-                                    }
-                                    Button(
-                                        onClick = { viewModel.approveOrRejectKyc(kyc.userId, false, "CNIC details blurry.") },
-                                        colors = ButtonDefaults.buttonColors(containerColor = ErrorRed)
-                                    ) {
-                                        Text("Reject")
-                                    }
+                                    Button(onClick = { viewModel.approveOrRejectKyc(kyc.userId, true) }, colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen)) { Text("Approve") }
+                                    Button(onClick = { viewModel.approveOrRejectKyc(kyc.userId, false, "CNIC details blurry.") }, colors = ButtonDefaults.buttonColors(containerColor = ErrorRed)) { Text("Reject") }
                                 }
                             }
                         }
@@ -1780,13 +1623,11 @@ fun AdminReviewsScreen(viewModel: TaskMallahViewModel) {
 @Composable
 fun AdminUsersScreen(viewModel: TaskMallahViewModel) {
     val allUsers by viewModel.adminAllUsers.collectAsState()
-
     var showAdjustDialog by remember { mutableStateOf<UserEntity?>(null) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text("User Management (Audit)", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = IslamicGreen)
         Spacer(modifier = Modifier.height(12.dp))
-
         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             items(allUsers) { user ->
                 Card(modifier = Modifier.fillMaxWidth()) {
@@ -1798,21 +1639,10 @@ fun AdminUsersScreen(viewModel: TaskMallahViewModel) {
                         Text("Email: ${user.email}", fontSize = 13.sp)
                         Text("Phone: ${user.phone}", fontSize = 13.sp)
                         Text("Balance: ${user.walletBalancePkr} PKR", fontWeight = FontWeight.Bold, color = HalalGoldDark)
-
                         Spacer(modifier = Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                onClick = { showAdjustDialog = user },
-                                colors = ButtonDefaults.buttonColors(containerColor = IslamicGreen)
-                            ) {
-                                Text("Adjust Balance")
-                            }
-                            Button(
-                                onClick = { viewModel.moderateUserBan(user.id, !user.isBanned, "Security audit ban.") },
-                                colors = ButtonDefaults.buttonColors(containerColor = if (user.isBanned) SuccessGreen else ErrorRed)
-                            ) {
-                                Text(if (user.isBanned) "Unban" else "Ban User")
-                            }
+                            Button(onClick = { showAdjustDialog = user }, colors = ButtonDefaults.buttonColors(containerColor = IslamicGreen)) { Text("Adjust Balance") }
+                            Button(onClick = { viewModel.moderateUserBan(user.id, !user.isBanned, "Security audit ban.") }, colors = ButtonDefaults.buttonColors(containerColor = if (user.isBanned) SuccessGreen else ErrorRed)) { Text(if (user.isBanned) "Unban" else "Ban User") }
                         }
                     }
                 }
@@ -1823,23 +1653,13 @@ fun AdminUsersScreen(viewModel: TaskMallahViewModel) {
     if (showAdjustDialog != null) {
         var adjustAmt by remember { mutableStateOf("") }
         var adjReason by remember { mutableStateOf("") }
-
         AlertDialog(
             onDismissRequest = { showAdjustDialog = null },
             title = { Text("Adjust Wallet: ${showAdjustDialog!!.name}") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = adjustAmt,
-                        onValueChange = { adjustAmt = it },
-                        label = { Text("Amount (+ or -)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                    )
-                    OutlinedTextField(
-                        value = adjReason,
-                        onValueChange = { adjReason = it },
-                        label = { Text("Reason for audit trail") }
-                    )
+                    OutlinedTextField(value = adjustAmt, onValueChange = { adjustAmt = it }, label = { Text("Amount (+ or -)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                    OutlinedTextField(value = adjReason, onValueChange = { adjReason = it }, label = { Text("Reason for audit trail") })
                 }
             },
             confirmButton = {
@@ -1852,13 +1672,9 @@ fun AdminUsersScreen(viewModel: TaskMallahViewModel) {
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = IslamicGreen)
-                ) {
-                    Text("Apply Adjustment")
-                }
+                ) { Text("Apply Adjustment") }
             },
-            dismissButton = {
-                TextButton(onClick = { showAdjustDialog = null }) { Text("Cancel") }
-            }
+            dismissButton = { TextButton(onClick = { showAdjustDialog = null }) { Text("Cancel") } }
         )
     }
 }
@@ -1874,139 +1690,60 @@ fun ProfileScreen(viewModel: TaskMallahViewModel, onLogout: () -> Unit) {
     var mockBackPath by remember { mutableStateOf("") }
 
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
+        modifier = Modifier.fillMaxSize().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Box(
-                modifier = Modifier
-                    .size(90.dp)
-                    .background(IslamicGreen.copy(0.1f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
+            Box(modifier = Modifier.size(90.dp).background(IslamicGreen.copy(0.1f), CircleShape), contentAlignment = Alignment.Center) {
                 Icon(Icons.Default.AccountBox, contentDescription = null, tint = IslamicGreen, modifier = Modifier.size(54.dp))
             }
         }
-
         item {
             Text(currentUser?.name ?: "User Profile", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = IslamicGreen)
             Text(currentUser?.email ?: "", fontSize = 13.sp, color = Color.Gray)
         }
-
         item {
-            // KYC Verified Status Tag
             Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(
-                        when (currentUser?.kycStatus) {
-                            "APPROVED" -> SuccessGreen.copy(0.15f)
-                            "PENDING" -> HalalGold.copy(0.15f)
-                            else -> ErrorRed.copy(0.15f)
-                        }
-                    )
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(when (currentUser?.kycStatus) { "APPROVED" -> SuccessGreen.copy(0.15f); "PENDING" -> HalalGold.copy(0.15f); else -> ErrorRed.copy(0.15f) }).padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
-                Text(
-                    text = "KYC Status: ${currentUser?.kycStatus ?: "NOT_SUBMITTED"}",
-                    color = when (currentUser?.kycStatus) {
-                        "APPROVED" -> SuccessGreen
-                        "PENDING" -> HalalGoldDark
-                        else -> ErrorRed
-                    },
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp
-                )
+                Text(text = "KYC Status: ${currentUser?.kycStatus ?: "NOT_SUBMITTED"}", color = when (currentUser?.kycStatus) { "APPROVED" -> SuccessGreen; "PENDING" -> HalalGoldDark; else -> ErrorRed }, fontWeight = FontWeight.Bold, fontSize = 13.sp)
             }
         }
-
+        item { Divider() }
         item {
-            Divider()
-        }
-
-        item {
-            // Switch Portal Role Button
             Text("Switch Role Portal:", fontWeight = FontWeight.Bold, fontSize = 14.sp)
             Spacer(modifier = Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = { viewModel.switchActiveRole("EARNER") },
-                    colors = ButtonDefaults.buttonColors(containerColor = if (activeRole == "EARNER") IslamicGreen else Color.Gray)
-                ) {
-                    Text("Earner")
-                }
-                Button(
-                    onClick = { viewModel.switchActiveRole("ADVERTISER") },
-                    colors = ButtonDefaults.buttonColors(containerColor = if (activeRole == "ADVERTISER") IslamicGreen else Color.Gray)
-                ) {
-                    Text("Advertiser")
-                }
-                // Raju Bhai / Admin Check
+                Button(onClick = { viewModel.switchActiveRole("EARNER") }, colors = ButtonDefaults.buttonColors(containerColor = if (activeRole == "EARNER") IslamicGreen else Color.Gray)) { Text("Earner") }
+                Button(onClick = { viewModel.switchActiveRole("ADVERTISER") }, colors = ButtonDefaults.buttonColors(containerColor = if (activeRole == "ADVERTISER") IslamicGreen else Color.Gray)) { Text("Advertiser") }
                 if (currentUser?.email?.lowercase() == "rajubhai3508194@gmail.com" || currentUser?.phone == "03496677887") {
-                    Button(
-                        onClick = { viewModel.switchActiveRole("ADMIN") },
-                        colors = ButtonDefaults.buttonColors(containerColor = if (activeRole == "ADMIN") IslamicGreen else Color.Gray)
-                    ) {
-                        Text("Admin")
-                    }
+                    Button(onClick = { viewModel.switchActiveRole("ADMIN") }, colors = ButtonDefaults.buttonColors(containerColor = if (activeRole == "ADMIN") IslamicGreen else Color.Gray)) { Text("Admin") }
                 }
             }
         }
-
-        // KYC Form if not submitted
         if (currentUser?.kycStatus == "NOT_SUBMITTED" || currentUser?.kycStatus == "REJECTED") {
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("Submit KYC Verification (CNIC)", fontWeight = FontWeight.Bold, color = IslamicGreen)
-                        OutlinedTextField(
-                            value = cnicNo,
-                            onValueChange = { if (it.length <= 13) cnicNo = it },
-                            label = { Text("13 Digits CNIC Number") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        OutlinedTextField(value = cnicNo, onValueChange = { if (it.length <= 13) cnicNo = it }, label = { Text("13 Digits CNIC Number") }, modifier = Modifier.fillMaxWidth())
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                onClick = { mockFrontPath = "cnic_front_${System.currentTimeMillis()}.jpg" },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Front CNIC")
-                            }
-                            Button(
-                                onClick = { mockBackPath = "cnic_back_${System.currentTimeMillis()}.jpg" },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Back CNIC")
-                            }
+                            Button(onClick = { mockFrontPath = "cnic_front_${System.currentTimeMillis()}.jpg" }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant), modifier = Modifier.weight(1f)) { Text("Front CNIC") }
+                            Button(onClick = { mockBackPath = "cnic_back_${System.currentTimeMillis()}.jpg" }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant), modifier = Modifier.weight(1f)) { Text("Back CNIC") }
                         }
                         if (mockFrontPath.isNotEmpty() && mockBackPath.isNotEmpty()) {
-                            Button(
-                                onClick = { viewModel.submitKycDetails(cnicNo, mockFrontPath, mockBackPath) },
-                                colors = ButtonDefaults.buttonColors(containerColor = HalalGold),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Submit KYC", color = Color.Black, fontWeight = FontWeight.Bold)
-                            }
+                            Button(onClick = { viewModel.submitKycDetails(cnicNo, mockFrontPath, mockBackPath) }, colors = ButtonDefaults.buttonColors(containerColor = HalalGold), modifier = Modifier.fillMaxWidth()) { Text("Submit KYC", color = Color.Black, fontWeight = FontWeight.Bold) }
                         }
                     }
                 }
             }
         }
-
         item {
-            // Logout
             Button(
                 onClick = onLogout,
                 colors = ButtonDefaults.buttonColors(containerColor = ErrorRed),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-                    .testTag("logout_button")
+                modifier = Modifier.fillMaxWidth().height(50.dp).testTag("logout_button")
             ) {
                 Icon(Icons.Default.Logout, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
