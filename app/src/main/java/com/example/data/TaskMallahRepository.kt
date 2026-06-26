@@ -20,7 +20,6 @@ import java.util.Date
 class TaskMallahRepository(private val context: Context, private val db: AppDatabase) {
     private val dao = db.taskMallahDao()
 
-    // Firebase instances with safe lazy initialization
     private val auth: FirebaseAuth? by lazy {
         try {
             FirebaseAuth.getInstance()
@@ -39,7 +38,6 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
         }
     }
 
-    // Active User State Cached in Memory for convenience
     var currentUser: UserEntity? = null
         private set
 
@@ -47,18 +45,15 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
         currentUser = user
     }
 
-    // Live Platform Config Flow loaded from Firestore
     private val _adminProfitPool = MutableStateFlow(0.0)
     val adminProfitPool: StateFlow<Double> = _adminProfitPool.asStateFlow()
 
-    // Temporary registration storage for strict OTP verification
     private var pendingUser: UserEntity? = null
     private var pendingPassword = ""
     private var pendingDeviceHash = ""
     private var pendingCnicHash = ""
     private var generatedOtp: String? = null
 
-    // Helper: Device unique SHA-256 UUID Hash (Rule 1: One Device = One Account)
     fun getDeviceUuidHash(): String {
         return try {
             val androidId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "mock_android_id"
@@ -70,7 +65,6 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
         }
     }
 
-    // Helper: CNIC SHA-256 Hash for deduplication (Rule 4: CNIC deduplication)
     fun getCnicSha256(cnic: String): String {
         return try {
             val md = MessageDigest.getInstance("SHA-256")
@@ -81,7 +75,6 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
         }
     }
 
-    // Load admin profit pool and initial setup
     suspend fun loadPlatformConfig() {
         if (firestore != null) {
             try {
@@ -91,7 +84,6 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
                     val pool = snapshot.getDouble("admin_profit_pool") ?: 0.0
                     _adminProfitPool.value = pool
                 } else {
-                    // Initialize at 0 PKR by default
                     val initialData = hashMapOf("admin_profit_pool" to 0.0)
                     Tasks.await(firestore!!.collection("platform_config").document("main").set(initialData))
                     _adminProfitPool.value = 0.0
@@ -102,7 +94,6 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
         }
     }
 
-    // Increment admin profit pool in Firestore and memory
     suspend fun incrementAdminProfitPool(amount: Double) {
         val newVal = _adminProfitPool.value + amount
         _adminProfitPool.value = newVal
@@ -116,12 +107,10 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
         }
     }
 
-    // Sync session from Firebase Auth on launch (Session persistence)
     suspend fun tryRestoreSession(): UserEntity? {
         val firebaseUser = auth?.currentUser
         if (firebaseUser != null) {
             val uid = firebaseUser.uid
-            // Fetch profile
             var user: UserEntity? = dao.getUserById(uid)
             if (user == null && firestore != null) {
                 try {
@@ -162,9 +151,7 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
         return null
     }
 
-    // Initialize Database with Seed Data
     suspend fun initializeDatabaseIfNeeded() {
-        // Try restoring live session first
         tryRestoreSession()
 
         val allTasks = dao.getAllTasksFlow().firstOrNull()
@@ -172,7 +159,6 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
             val initialTasks = SeedData.getInitialTasks()
             initialTasks.forEach { dao.insertTask(it) }
 
-            // Insert Super Admin if not exists
             val superAdmin = UserEntity(
                 id = "admin_raju",
                 name = "Raju Bhai (Super Admin)",
@@ -249,7 +235,6 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
             ))
         }
 
-        // Force-reset specific accounts balances to 0.0 PKR on launch
         val usersToReset = listOf("mallah7887@gmail.com", "demo.google@gmail.com")
         for (email in usersToReset) {
             val dbUser = dao.getUserByEmailOrPhone(email)
@@ -271,7 +256,6 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
         }
     }
 
-    // Authentication & Registration Flow
     suspend fun signup(
         name: String,
         email: String,
@@ -319,14 +303,61 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
         }
 
         val allUsersFlow = dao.getAllUsersFlow().firstOrNull() ?: emptyList()
+        val emailExists = allUsersFlow.any { it.email.lowercase() == email.lowercase() }
+        val phoneExists = allUsersFlow.any { it.phone == phone }
+
+        if (emailExists && phoneExists) {
+            return Result.failure(Exception("⚠️ Yeh Email aur Mobile Number dono pehle se registered hain. Bara-e-meherbani Login karein."))
+        }
+        if (emailExists) {
+            return Result.failure(Exception("⚠️ Yeh Email address pehle se registered hai. Kya aap Login karna chahte hain?"))
+        }
+        if (phoneExists) {
+            return Result.failure(Exception("⚠️ Yeh Mobile Number pehle se registered hai. Kya aap Login karna chahte hain?"))
+        }
         if (allUsersFlow.any { it.cnicHash == cnicHash }) {
-            return Result.failure(Exception("Yeh CNIC pehle se register hai. Ek CNIC par ek hi account ban sakta hai."))
+            return Result.failure(Exception("⚠️ Yeh CNIC pehle se register hai. Ek CNIC par sirf ek account ban sakta hai."))
         }
-        if (allUsersFlow.any { it.email.lowercase() == email.lowercase() }) {
-            return Result.failure(Exception("Yeh Email pehle se register hai."))
+
+        if (auth != null) {
+            try {
+                val methods = Tasks.await(auth!!.fetchSignInMethodsForEmail(email))
+                if (methods.signInMethods?.isNotEmpty() == true) {
+                    return Result.failure(Exception("⚠️ Yeh Email Firebase par pehle se registered hai. Bara-e-meherbani Login karein."))
+                }
+            } catch (e: Exception) {
+                Log.w("FirebaseCheck", "Firebase email check warning: ${e.message}")
+            }
         }
-        if (allUsersFlow.any { it.phone == phone }) {
-            return Result.failure(Exception("Yeh Mobile Number pehle se register hai."))
+
+        if (firestore != null) {
+            try {
+                val emailQuery = Tasks.await(
+                    firestore!!.collection("users")
+                        .whereEqualTo("email", email.lowercase())
+                        .get()
+                )
+                val phoneQuery = Tasks.await(
+                    firestore!!.collection("users")
+                        .whereEqualTo("phone", phone)
+                        .get()
+                )
+
+                val fsEmailExists = emailQuery.documents.isNotEmpty()
+                val fsPhoneExists = phoneQuery.documents.isNotEmpty()
+
+                if (fsEmailExists && fsPhoneExists) {
+                    return Result.failure(Exception("⚠️ Yeh Email aur Mobile Number dono pehle se registered hain. Bara-e-meherbani Login karein."))
+                }
+                if (fsEmailExists) {
+                    return Result.failure(Exception("⚠️ Yeh Email address pehle se registered hai. Kya aap Login karna chahte hain?"))
+                }
+                if (fsPhoneExists) {
+                    return Result.failure(Exception("⚠️ Yeh Mobile Number pehle se registered hai. Kya aap Login karna chahte hain?"))
+                }
+            } catch (e: Exception) {
+                Log.w("FirebaseCheck", "Firestore duplicate check warning: ${e.message}")
+            }
         }
 
         var referredByUserId: String? = null
@@ -380,7 +411,7 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
         return Result.success(newUser)
     }
 
-    // OTP Code Verification logic
+    // OTP Code Verification logic - FIXED: All Tasks.await() inside IO thread
     suspend fun verifyOtpAndCompleteSignup(enteredCode: String): Result<UserEntity> {
         val user = pendingUser ?: return Result.failure(Exception("Koi pending registration nahi mili. Bara-e-meherbani signup dubara karein."))
         val otpCode = generatedOtp ?: "786786"
@@ -391,53 +422,53 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
 
         if (auth != null && firestore != null) {
             try {
-                val authResult = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    Tasks.await(auth!!.createUserWithEmailAndPassword(user.email, pendingPassword))
+                val finalUser = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val authResult = Tasks.await(auth!!.createUserWithEmailAndPassword(user.email, pendingPassword))
+                    val firebaseUid = authResult.user?.uid ?: user.id
+                    val innerUser = user.copy(id = firebaseUid)
+
+                    val userDoc = hashMapOf(
+                        "name" to innerUser.name,
+                        "email" to innerUser.email,
+                        "phone" to innerUser.phone,
+                        "cnicHash" to innerUser.cnicHash,
+                        "role" to innerUser.role,
+                        "walletBalancePkr" to 0.0,
+                        "totalEarnedPkr" to 0.0,
+                        "totalWithdrawnPkr" to 0.0,
+                        "totalReferralPkr" to 0.0,
+                        "referralCode" to innerUser.referralCode,
+                        "referredBy" to innerUser.referredBy,
+                        "kycStatus" to innerUser.kycStatus,
+                        "accountLevel" to innerUser.accountLevel,
+                        "isBanned" to innerUser.isBanned,
+                        "createdAt" to innerUser.createdAt
+                    )
+                    Tasks.await(firestore!!.collection("users").document(firebaseUid).set(userDoc))
+
+                    val deviceDoc = hashMapOf(
+                        "uuid_hash" to pendingDeviceHash,
+                        "user_id" to firebaseUid,
+                        "registered_at" to System.currentTimeMillis()
+                    )
+                    Tasks.await(firestore!!.collection("device_registry").document(pendingDeviceHash).set(deviceDoc))
+
+                    val cnicDoc = hashMapOf(
+                        "cnic_hash" to pendingCnicHash,
+                        "user_id" to firebaseUid,
+                        "registered_at" to System.currentTimeMillis()
+                    )
+                    Tasks.await(firestore!!.collection("cnic_registry").document(pendingCnicHash).set(cnicDoc))
+
+                    innerUser
                 }
-                val firebaseUid = authResult.user?.uid ?: user.id
-                val finalUser = user.copy(id = firebaseUid)
-
-                val userDoc = hashMapOf(
-                    "name" to finalUser.name,
-                    "email" to finalUser.email,
-                    "phone" to finalUser.phone,
-                    "cnicHash" to finalUser.cnicHash,
-                    "role" to finalUser.role,
-                    "walletBalancePkr" to 0.0,
-                    "totalEarnedPkr" to 0.0,
-                    "totalWithdrawnPkr" to 0.0,
-                    "totalReferralPkr" to 0.0,
-                    "referralCode" to finalUser.referralCode,
-                    "referredBy" to finalUser.referredBy,
-                    "kycStatus" to finalUser.kycStatus,
-                    "accountLevel" to finalUser.accountLevel,
-                    "isBanned" to finalUser.isBanned,
-                    "createdAt" to finalUser.createdAt
-                )
-
-                Tasks.await(firestore!!.collection("users").document(firebaseUid).set(userDoc))
-
-                val deviceDoc = hashMapOf(
-                    "uuid_hash" to pendingDeviceHash,
-                    "user_id" to firebaseUid,
-                    "registered_at" to System.currentTimeMillis()
-                )
-                Tasks.await(firestore!!.collection("device_registry").document(pendingDeviceHash).set(deviceDoc))
-
-                val cnicDoc = hashMapOf(
-                    "cnic_hash" to pendingCnicHash,
-                    "user_id" to firebaseUid,
-                    "registered_at" to System.currentTimeMillis()
-                )
-                Tasks.await(firestore!!.collection("cnic_registry").document(pendingCnicHash).set(cnicDoc))
 
                 dao.insertUser(finalUser)
                 currentUser = finalUser
-
                 pendingUser = null
                 generatedOtp = null
-
                 return Result.success(finalUser)
+
             } catch (e: Exception) {
                 return Result.failure(Exception("Firebase registration fail ho gayi: ${e.message}"))
             }
@@ -646,7 +677,6 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
         currentUser = updatedUser
     }
 
-    // User Profile & KYC Upload
     suspend fun submitKyc(cnicNo: String, frontPath: String, backPath: String): Result<Unit> {
         val user = currentUser ?: return Result.failure(Exception("Pehle login karein."))
         if (cnicNo.length != 13 || !cnicNo.all { it.isDigit() }) {
@@ -669,7 +699,6 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
         return Result.success(Unit)
     }
 
-    // Task Browser Flows
     fun getTasksFlow(): Flow<List<TaskEntity>> = dao.getAllTasksFlow()
 
     suspend fun getTaskById(taskId: String): TaskEntity? = dao.getTaskById(taskId)
@@ -682,7 +711,6 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
         return dao.getCompletionForEarnerAndTask(user.id, taskId)
     }
 
-    // Submission Flow
     suspend fun submitTaskProof(
         taskId: String,
         screenshotPath: String,
@@ -737,7 +765,6 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
         return Result.success(Unit)
     }
 
-    // AdMob Earnings Flow
     suspend fun watchAd(adType: String, rewardAmountFromAdMob: Double? = null): Result<Double> {
         val user = currentUser ?: return Result.failure(Exception("Pehle login karein."))
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
@@ -876,7 +903,6 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
         }
     }
 
-    // Wallet & Withdrawals
     fun getTransactionsFlow(userId: String): Flow<List<TransactionEntity>> =
         dao.getTransactionsForUser(userId)
 
@@ -931,7 +957,6 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
         return Result.success(Unit)
     }
 
-    // Advertiser Flows
     fun getDepositRequestsFlow(advertiserId: String): Flow<List<DepositRequestEntity>> =
         dao.getDepositRequestsForAdvertiser(advertiserId)
 
@@ -1017,7 +1042,6 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
         return dao.getTasksByAdvertiser(user.id)
     }
 
-    // SUPER ADMIN POWERS
     fun getAllPendingCompletionsFlow(): Flow<List<CompletionEntity>> = dao.getAllPendingCompletionsFlow()
     fun getAllPendingKycFlow(): Flow<List<KycEntity>> = dao.getAllPendingKycFlow()
     fun getAllPendingDepositsFlow(): Flow<List<DepositRequestEntity>> = dao.getAllPendingDepositsFlow()
