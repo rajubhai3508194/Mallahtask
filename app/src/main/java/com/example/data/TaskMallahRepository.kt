@@ -439,62 +439,54 @@ if (firestore != null) {
 
         if (auth != null && firestore != null) {
             try {
-                val authResult = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    Tasks.await(auth!!.createUserWithEmailAndPassword(user.email, pendingPassword))
-                }
-                val firebaseUid = authResult.user?.uid ?: user.id
-                val finalUser = user.copy(id = firebaseUid)
+                val finalUser = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    val authResult = Tasks.await(auth!!.createUserWithEmailAndPassword(user.email, pendingPassword))
+    val firebaseUid = authResult.user?.uid ?: user.id
+    val innerFinalUser = user.copy(id = firebaseUid)
 
-                val userDoc = hashMapOf(
-                    "name" to finalUser.name,
-                    "email" to finalUser.email,
-                    "phone" to finalUser.phone,
-                    "cnicHash" to finalUser.cnicHash,
-                    "role" to finalUser.role,
-                    "walletBalancePkr" to 0.0,
-                    "totalEarnedPkr" to 0.0,
-                    "totalWithdrawnPkr" to 0.0,
-                    "totalReferralPkr" to 0.0,
-                    "referralCode" to finalUser.referralCode,
-                    "referredBy" to finalUser.referredBy,
-                    "kycStatus" to finalUser.kycStatus,
-                    "accountLevel" to finalUser.accountLevel,
-                    "isBanned" to finalUser.isBanned,
-                    "createdAt" to finalUser.createdAt
-                )
+    val userDoc = hashMapOf(
+        "name" to innerFinalUser.name,
+        "email" to innerFinalUser.email,
+        "phone" to innerFinalUser.phone,
+        "cnicHash" to innerFinalUser.cnicHash,
+        "role" to innerFinalUser.role,
+        "walletBalancePkr" to 0.0,
+        "totalEarnedPkr" to 0.0,
+        "totalWithdrawnPkr" to 0.0,
+        "totalReferralPkr" to 0.0,
+        "referralCode" to innerFinalUser.referralCode,
+        "referredBy" to innerFinalUser.referredBy,
+        "kycStatus" to innerFinalUser.kycStatus,
+        "accountLevel" to innerFinalUser.accountLevel,
+        "isBanned" to innerFinalUser.isBanned,
+        "createdAt" to innerFinalUser.createdAt
+    )
+    Tasks.await(firestore!!.collection("users").document(firebaseUid).set(userDoc))
 
-                Tasks.await(firestore!!.collection("users").document(firebaseUid).set(userDoc))
+    val deviceDoc = hashMapOf(
+        "uuid_hash" to pendingDeviceHash,
+        "user_id" to firebaseUid,
+        "registered_at" to System.currentTimeMillis()
+    )
+    Tasks.await(firestore!!.collection("device_registry").document(pendingDeviceHash).set(deviceDoc))
 
-                val deviceDoc = hashMapOf(
-                    "uuid_hash" to pendingDeviceHash,
-                    "user_id" to firebaseUid,
-                    "registered_at" to System.currentTimeMillis()
-                )
-                Tasks.await(firestore!!.collection("device_registry").document(pendingDeviceHash).set(deviceDoc))
+    val cnicDoc = hashMapOf(
+        "cnic_hash" to pendingCnicHash,
+        "user_id" to firebaseUid,
+        "registered_at" to System.currentTimeMillis()
+    )
+    Tasks.await(firestore!!.collection("cnic_registry").document(pendingCnicHash).set(cnicDoc))
 
-                val cnicDoc = hashMapOf(
-                    "cnic_hash" to pendingCnicHash,
-                    "user_id" to firebaseUid,
-                    "registered_at" to System.currentTimeMillis()
-                )
-                Tasks.await(firestore!!.collection("cnic_registry").document(pendingCnicHash).set(cnicDoc))
+    innerFinalUser
+}
 
-                dao.insertUser(finalUser)
-                currentUser = finalUser
+dao.insertUser(finalUser)
+currentUser = finalUser
 
-                pendingUser = null
-                generatedOtp = null
+pendingUser = null
+generatedOtp = null
 
-                return Result.success(finalUser)
-            } catch (e: Exception) {
-                return Result.failure(Exception("Firebase registration fail ho gayi: ${e.message}"))
-            }
-        } else {
-            dao.insertUser(user)
-            currentUser = user
-            pendingUser = null
-            generatedOtp = null
-            return Result.success(user)
+return Result.success(finalUser)
         }
     }
 
