@@ -319,16 +319,64 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
         }
 
         val allUsersFlow = dao.getAllUsersFlow().firstOrNull() ?: emptyList()
-        if (allUsersFlow.any { it.cnicHash == cnicHash }) {
-            return Result.failure(Exception("Yeh CNIC pehle se register hai. Ek CNIC par ek hi account ban sakta hai."))
-        }
-        if (allUsersFlow.any { it.email.lowercase() == email.lowercase() }) {
-            return Result.failure(Exception("Yeh Email pehle se register hai."))
-        }
-        if (allUsersFlow.any { it.phone == phone }) {
-            return Result.failure(Exception("Yeh Mobile Number pehle se register hai."))
-        }
+       val emailExists = allUsersFlow.any { it.email.lowercase() == email.lowercase() }
+val phoneExists = allUsersFlow.any { it.phone == phone }
 
+if (emailExists && phoneExists) {
+    return Result.failure(Exception("⚠️ Yeh Email aur Mobile Number dono pehle se registered hain. Bara-e-meherbani Login karein."))
+}
+if (emailExists) {
+    return Result.failure(Exception("⚠️ Yeh Email address pehle se registered hai. Kya aap Login karna chahte hain?"))
+}
+if (phoneExists) {
+    return Result.failure(Exception("⚠️ Yeh Mobile Number pehle se registered hai. Kya aap Login karna chahte hain?"))
+}
+if (allUsersFlow.any { it.cnicHash == cnicHash }) {
+    return Result.failure(Exception("⚠️ Yeh CNIC pehle se register hai. Ek CNIC par sirf ek account ban sakta hai."))
+}
+
+// Firebase Auth email check
+if (auth != null) {
+    try {
+        val methods = Tasks.await(auth!!.fetchSignInMethodsForEmail(email))
+        if (methods.signInMethods?.isNotEmpty() == true) {
+            return Result.failure(Exception("⚠️ Yeh Email Firebase par pehle se registered hai. Bara-e-meherbani Login karein."))
+        }
+    } catch (e: Exception) {
+        Log.w("FirebaseCheck", "Firebase email check warning: ${e.message}")
+    }
+}
+
+// Firestore email aur phone check
+if (firestore != null) {
+    try {
+        val emailQuery = Tasks.await(
+            firestore!!.collection("users")
+                .whereEqualTo("email", email.lowercase())
+                .get()
+        )
+        val phoneQuery = Tasks.await(
+            firestore!!.collection("users")
+                .whereEqualTo("phone", phone)
+                .get()
+        )
+
+        val fsEmailExists = emailQuery.documents.isNotEmpty()
+        val fsPhoneExists = phoneQuery.documents.isNotEmpty()
+
+        if (fsEmailExists && fsPhoneExists) {
+            return Result.failure(Exception("⚠️ Yeh Email aur Mobile Number dono pehle se registered hain. Bara-e-meherbani Login karein."))
+        }
+        if (fsEmailExists) {
+            return Result.failure(Exception("⚠️ Yeh Email address pehle se registered hai. Kya aap Login karna chahte hain?"))
+        }
+        if (fsPhoneExists) {
+            return Result.failure(Exception("⚠️ Yeh Mobile Number pehle se registered hai. Kya aap Login karna chahte hain?"))
+        }
+    } catch (e: Exception) {
+        Log.w("FirebaseCheck", "Firestore duplicate check warning: ${e.message}")
+    }
+}
         var referredByUserId: String? = null
         if (!referralCode.isNullOrBlank()) {
             val referrer = dao.getUserByReferralCode(referralCode.trim().uppercase())
