@@ -16,8 +16,6 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '9.3.1'
 
       - name: Create Debug Keystore
         run: |
@@ -31,11 +29,26 @@ jobs:
             -keypass android \
             -dname "CN=Android Debug,O=Android,C=US"
 
+      - name: Print SHA-1
+        run: |
+          keytool -list -v \
+            -keystore debug.keystore \
+            -alias androiddebugkey \
+            -storepass android \
+            -keypass android | grep "SHA1:"
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
       - name: Build Debug APK
-        run: gradle assembleDebug
+        run: ./gradlew assembleDebug
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
       - name: Build Debug AAB
-        run: gradle bundleDebug
+        run: ./gradlew bundleDebug
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
