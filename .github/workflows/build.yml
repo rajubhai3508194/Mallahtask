@@ -20,7 +20,7 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
-      - name: Create Debug Keystore
+      - name: Create Fixed Debug Keystore
         run: |
           keytool -genkeypair -v \
             -keystore debug.keystore \
@@ -30,7 +30,8 @@ jobs:
             -validity 10000 \
             -storepass android \
             -keypass android \
-            -dname "CN=Android Debug,O=Android,C=US"
+            -dname "CN=Android Debug,O=Android,C=US" \
+            -startdate "2026/01/01 00:00:00"
 
       - name: Print SHA-1
         run: |
