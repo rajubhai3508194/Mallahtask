@@ -44,7 +44,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
 import com.example.R
-import com.example.BuildConfig // Make sure to import your project's BuildConfig
+import com.example.BuildConfig
 import com.example.data.AdMobManager
 import com.example.data.*
 import com.example.ui.theme.IslamicGreen
@@ -63,6 +63,12 @@ sealed class AppScreen {
     object OTPVerify : AppScreen()
     object Dashboard : AppScreen()
 }
+
+data class OnboardingSlide(
+    val title: String,
+    val description: String,
+    val icon: ImageVector
+)
 
 @Composable
 fun MuslimAvatarView(avatarName: String?, modifier: Modifier = Modifier) {
@@ -523,7 +529,6 @@ fun TaskMallahApp(viewModel: TaskMallahViewModel) {
 @Composable
 fun SplashScreen(onTimeout: () -> Unit) {
     val context = LocalContext.current
-    // Safely retrieve the activity using our safe helper function
     val activity = remember(context) { context.findActivity() }
 
     LaunchedEffect(Unit) {
@@ -548,7 +553,6 @@ fun SplashScreen(onTimeout: () -> Unit) {
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            // Elegant official App Logo
             Box(
                 modifier = Modifier
                     .size(130.dp)
@@ -678,27 +682,80 @@ fun OnboardingScreen(onFinish: () -> Unit) {
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(50.dp)
-                    .testTag("onboarding_next_button"),
-                colors = ButtonDefaults.buttonColors(containerColor = IslamicGreen),
-                shape = RoundedCornerShape(12.dp)
+                    .height(50.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = IslamicGreen)
             ) {
-                Text(
-                    text = if (currentPage == slides.lastIndex) "Shuru Karein" else "Agla Page",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
+                Text(if (currentPage == slides.lastIndex) "Get Started" else "Next", color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
     }
 }
 
-data class OnboardingSlide(val title: String, val description: String, val icon: ImageVector)
+// --- TEMPORARY SCREEN PLACEHOLDERS TO FIX BUILD ERRORS ---
 
-// ----------------- Context Extension Helper Function -----------------
-// Safely unpacks base Context references to find the original hosting Activity instance
-tailrec fun Context.findActivity(): Activity? = when (this) {
+@Composable
+fun AuthSelectionScreen(onLoginClick: () -> Unit, onRegisterClick: () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Text("Auth Selection Screen", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(onClick = onLoginClick, colors = ButtonDefaults.buttonColors(containerColor = IslamicGreen)) { Text("Go to Login") }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = onRegisterClick, colors = ButtonDefaults.buttonColors(containerColor = HalalGold)) { Text("Go to Register", color = Color.Black) }
+        }
+    }
+}
+
+@Composable
+fun RegisterScreen(viewModel: TaskMallahViewModel, onBack: () -> Unit, onSuccess: () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Text("Register Screen", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(onClick = onSuccess, colors = ButtonDefaults.buttonColors(containerColor = IslamicGreen)) { Text("Simulate OTP Required") }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = onBack, colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)) { Text("Back") }
+        }
+    }
+}
+
+@Composable
+fun LoginScreen(viewModel: TaskMallahViewModel, onBack: () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Text("Login Screen", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(onClick = onBack, colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)) { Text("Back") }
+        }
+    }
+}
+
+@Composable
+fun OTPVerifyScreen(viewModel: TaskMallahViewModel, onBack: () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Text("OTP Verification Screen", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(onClick = onBack, colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)) { Text("Back") }
+        }
+    }
+}
+
+@Composable
+fun DashboardPortal(viewModel: TaskMallahViewModel, onLogout: () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Text("Welcome to TaskMallah Dashboard!", fontSize = 22.sp, color = IslamicGreen, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(onClick = onLogout, colors = ButtonDefaults.buttonColors(containerColor = ErrorRed)) { 
+                Text("Logout") 
+            }
+        }
+    }
+}
+
+// Extension to find activity context safely
+fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null
