@@ -587,7 +587,7 @@ fun LoginScreen(viewModel: TaskMallahViewModel, onBack: () -> Unit) {
 
         Button(
             onClick = {
-                viewModel.loginUser(identifier)
+                viewModel.loginUser(identifier, password)
             },
             modifier = Modifier
                 .fillMaxWidth()
