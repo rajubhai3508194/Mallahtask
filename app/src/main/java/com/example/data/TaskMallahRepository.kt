@@ -403,7 +403,7 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
         // Complete creation with Live Firebase Auth and Firestore if available
         if (auth != null && firestore != null) {
             try {
-                val authResult = Tasks.await(auth!!.createUserWithEmailAndPassword(user.email, pendingPassword))
+                val authResult = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {     Tasks.await(auth!!.createUserWithEmailAndPassword(user.email, pendingPassword)) }
                 val firebaseUid = authResult.user?.uid ?: user.id
                 val finalUser = user.copy(id = firebaseUid)
 
@@ -528,7 +528,9 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
         // Live Firebase Auth authentication
         if (auth != null) {
             try {
-                Tasks.await(auth!!.signInWithEmailAndPassword(user.email, passwordPlain))
+                kotlinx.coroutines.kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    Tasks.await(auth!!.signInWithEmailAndPassword(user.email, passwordPlain))
+}(kotlinx.coroutines.Dispatchers.IO) {     Tasks.await(auth!!.signInWithEmailAndPassword(user.email, passwordPlain)) } }
             } catch (e: Exception) {
                 return Result.failure(Exception("Ghalat password ya details. Dubara koshish karein."))
             }
