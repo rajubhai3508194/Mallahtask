@@ -1,30 +1,17 @@
 package com.example.viewmodel
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.data.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import java.util.UUID
 
-class TaskMallahViewModel(application: Application) : AndroidViewModel(application) {
+class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewModel() {
 
-    private val db = AppDatabase.getDatabase(application)
-    private val repository = TaskMallahRepository(application, db)
-    private val dao = db.taskMallahDao()
-
-    // ==========================================
-    // AUTH STATE
-    // ==========================================
+    // --- Authentication States ---
     private val _currentUser = MutableStateFlow<UserEntity?>(null)
     val currentUser: StateFlow<UserEntity?> = _currentUser.asStateFlow()
-
-    private val _activeRole = MutableStateFlow("EARNER")
-    val activeRole: StateFlow<String> = _activeRole.asStateFlow()
-
-    private val _isProcessing = MutableStateFlow(false)
-    val isProcessing: StateFlow<Boolean> = _isProcessing.asStateFlow()
 
     private val _authError = MutableStateFlow<String?>(null)
     val authError: StateFlow<String?> = _authError.asStateFlow()
@@ -32,19 +19,21 @@ class TaskMallahViewModel(application: Application) : AndroidViewModel(applicati
     private val _authSuccess = MutableStateFlow<String?>(null)
     val authSuccess: StateFlow<String?> = _authSuccess.asStateFlow()
 
-    private val _toastMessage = MutableStateFlow<String?>(null)
-    val toastMessage: StateFlow<String?> = _toastMessage.asStateFlow()
+    private val _activeRole = MutableStateFlow("EARNER")
+    val activeRole: StateFlow<String> = _activeRole.asStateFlow()
 
-    // ==========================================
-    // ADMIN PROFIT POOL
-    // ==========================================
     val adminProfitPool: StateFlow<Double> = repository.adminProfitPool
 
-    // ==========================================
-    // EARNER DATA
-    // ==========================================
-    private val _filteredTasks = MutableStateFlow<List<TaskEntity>>(emptyList())
-    val filteredTasks: StateFlow<List<TaskEntity>> = _filteredTasks.asStateFlow()
+    private val _isOtpRequired = MutableStateFlow(false)
+    val isOtpRequired: StateFlow<Boolean> = _isOtpRequired.asStateFlow()
+
+    fun clearOtpRequired() {
+        _isOtpRequired.value = false
+    }
+
+    // --- Earner Flows ---
+    val allTasks: StateFlow<List<TaskEntity>> = repository.getTasksFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _taskSearchQuery = MutableStateFlow("")
     val taskSearchQuery: StateFlow<String> = _taskSearchQuery.asStateFlow()
@@ -52,199 +41,109 @@ class TaskMallahViewModel(application: Application) : AndroidViewModel(applicati
     private val _selectedPlatformFilter = MutableStateFlow<String?>(null)
     val selectedPlatformFilter: StateFlow<String?> = _selectedPlatformFilter.asStateFlow()
 
+    val filteredTasks: StateFlow<List<TaskEntity>> = combine(
+        allTasks,
+        _taskSearchQuery,
+        _selectedPlatformFilter
+    ) { tasks, query, platform ->
+        tasks.filter { task ->
+            val matchesQuery = query.isBlank() || task.campaignName.contains(query, ignoreCase = true) || task.platform.contains(query, ignoreCase = true)
+            val matchesPlatform = platform == null || task.platform.lowercase() == platform.lowercase()
+            val isActive = task.status == "ACTIVE"
+            matchesQuery && matchesPlatform && isActive
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     private val _selectedTask = MutableStateFlow<TaskEntity?>(null)
     val selectedTask: StateFlow<TaskEntity?> = _selectedTask.asStateFlow()
 
     private val _selectedTaskCompletion = MutableStateFlow<CompletionEntity?>(null)
     val selectedTaskCompletion: StateFlow<CompletionEntity?> = _selectedTaskCompletion.asStateFlow()
 
-    private val _userTransactions = MutableStateFlow<List<TransactionEntity>>(emptyList())
-    val userTransactions: StateFlow<List<TransactionEntity>> = _userTransactions.asStateFlow()
+    val userTransactions: StateFlow<List<TransactionEntity>> = currentUser
+        .flatMapLatest { user ->
+            if (user != null) repository.getTransactionsFlow(user.id) else flowOf(emptyList())
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // ==========================================
-    // ADVERTISER DATA
-    // ==========================================
-    private val _advertiserCampaigns = MutableStateFlow<List<TaskEntity>>(emptyList())
-    val advertiserCampaigns: StateFlow<List<TaskEntity>> = _advertiserCampaigns.asStateFlow()
+    val earnerCompletions: StateFlow<List<CompletionEntity>> = currentUser
+        .flatMapLatest { user ->
+            if (user != null) repository.getCompletionsForEarnerFlow(user.id) else flowOf(emptyList())
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // ==========================================
-    // ADMIN DATA - ALL
-    // ==========================================
-    private val _adminPendingCompletions = MutableStateFlow<List<CompletionEntity>>(emptyList())
-    val adminPendingCompletions: StateFlow<List<CompletionEntity>> = _adminPendingCompletions.asStateFlow()
+    val userWithdrawals: StateFlow<List<WithdrawalRequestEntity>> = currentUser
+        .flatMapLatest { user ->
+            if (user != null) repository.getWithdrawalRequestsFlow(user.id) else flowOf(emptyList())
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val _adminPendingKyc = MutableStateFlow<List<KycEntity>>(emptyList())
-    val adminPendingKyc: StateFlow<List<KycEntity>> = _adminPendingKyc.asStateFlow()
+    val advertiserDeposits: StateFlow<List<DepositRequestEntity>> = currentUser
+        .flatMapLatest { user ->
+            if (user != null && user.role == "ADVERTISER") repository.getDepositRequestsFlow(user.id) else flowOf(emptyList())
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val _adminPendingDeposits = MutableStateFlow<List<DepositRequestEntity>>(emptyList())
-    val adminPendingDeposits: StateFlow<List<DepositRequestEntity>> = _adminPendingDeposits.asStateFlow()
+    val advertiserCampaigns: StateFlow<List<TaskEntity>> = currentUser
+        .flatMapLatest { user ->
+            if (user != null && user.role == "ADVERTISER") repository.getAdvertiserCampaignsFlow() else flowOf(emptyList())
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val _adminPendingWithdrawals = MutableStateFlow<List<WithdrawalRequestEntity>>(emptyList())
-    val adminPendingWithdrawals: StateFlow<List<WithdrawalRequestEntity>> = _adminPendingWithdrawals.asStateFlow()
+    val savedAccounts: StateFlow<List<SavedAccountEntity>> = currentUser
+        .flatMapLatest { user ->
+            if (user != null) repository.getSavedAccountsFlow(user.id) else flowOf(emptyList())
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val _adminAllUsers = MutableStateFlow<List<UserEntity>>(emptyList())
-    val adminAllUsers: StateFlow<List<UserEntity>> = _adminAllUsers.asStateFlow()
 
-    private val _adminAllTransactions = MutableStateFlow<List<TransactionEntity>>(emptyList())
-    val adminAllTransactions: StateFlow<List<TransactionEntity>> = _adminAllTransactions.asStateFlow()
+    // --- Super Admin Realtime Flows ---
+    val adminPendingCompletions: StateFlow<List<CompletionEntity>> = repository.getAllPendingCompletionsFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // ALL Withdrawals (not just pending)
-    private val _adminAllWithdrawals = MutableStateFlow<List<WithdrawalRequestEntity>>(emptyList())
-    val adminAllWithdrawals: StateFlow<List<WithdrawalRequestEntity>> = _adminAllWithdrawals.asStateFlow()
+    val adminPendingKyc: StateFlow<List<KycEntity>> = repository.getAllPendingKycFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // ALL Deposits (not just pending)
-    private val _adminAllDeposits = MutableStateFlow<List<DepositRequestEntity>>(emptyList())
-    val adminAllDeposits: StateFlow<List<DepositRequestEntity>> = _adminAllDeposits.asStateFlow()
+    val adminPendingDeposits: StateFlow<List<DepositRequestEntity>> = repository.getAllPendingDepositsFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // ALL Tasks (for admin task management)
-    private val _allTasks = MutableStateFlow<List<TaskEntity>>(emptyList())
-    val allTasks: StateFlow<List<TaskEntity>> = _allTasks.asStateFlow()
+    val adminPendingWithdrawals: StateFlow<List<WithdrawalRequestEntity>> = repository.getAllPendingWithdrawalsFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // ==========================================
-    // INIT
-    // ==========================================
+    val adminAllUsers: StateFlow<List<UserEntity>> = repository.getAllUsersFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val adminAllTransactions: StateFlow<List<TransactionEntity>> = repository.getAllTransactionsFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val adminAllCompletions: StateFlow<List<CompletionEntity>> = repository.getAllCompletionsFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // --- Per-user transaction lookup for Admin (view any user's history) ---
+    private val _selectedUserForHistory = MutableStateFlow<UserEntity?>(null)
+    val selectedUserForHistory: StateFlow<UserEntity?> = _selectedUserForHistory.asStateFlow()
+
+    val selectedUserTransactions: StateFlow<List<TransactionEntity>> = _selectedUserForHistory
+        .flatMapLatest { user ->
+            if (user != null) repository.getTransactionsFlow(user.id) else flowOf(emptyList())
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun selectUserForHistory(user: UserEntity?) {
+        _selectedUserForHistory.value = user
+    }
+
+
+    // --- Operations UI States ---
+    private val _toastMessage = MutableStateFlow<String?>(null)
+    val toastMessage: StateFlow<String?> = _toastMessage.asStateFlow()
+
+    private val _isProcessing = MutableStateFlow(false)
+    val isProcessing: StateFlow<Boolean> = _isProcessing.asStateFlow()
+
     init {
         viewModelScope.launch {
             repository.initializeDatabaseIfNeeded()
-            val user = repository.currentUser
-            if (user != null) {
-                _currentUser.value = user
-                _activeRole.value = user.role
-                startObservingData()
-            }
+            _currentUser.value = repository.currentUser
+            _activeRole.value = repository.currentUser?.role ?: "EARNER"
         }
     }
 
-    private fun startObservingData() {
-        val user = _currentUser.value ?: return
-
-        // Observe transactions for current user
-        viewModelScope.launch {
-            repository.getTransactionsFlow(user.id).collect {
-                _userTransactions.value = it
-            }
-        }
-
-        // Observe tasks
-        viewModelScope.launch {
-            repository.getTasksFlow().collect { tasks ->
-                _allTasks.value = tasks
-                applyTaskFilters(tasks)
-            }
-        }
-
-        // Admin-only observations
-        viewModelScope.launch {
-            repository.getAllPendingCompletionsFlow().collect { _adminPendingCompletions.value = it }
-        }
-        viewModelScope.launch {
-            repository.getAllPendingKycFlow().collect { _adminPendingKyc.value = it }
-        }
-        viewModelScope.launch {
-            repository.getAllPendingDepositsFlow().collect { _adminPendingDeposits.value = it }
-        }
-        viewModelScope.launch {
-            repository.getAllPendingWithdrawalsFlow().collect { _adminPendingWithdrawals.value = it }
-        }
-        viewModelScope.launch {
-            repository.getAllUsersFlow().collect { _adminAllUsers.value = it }
-        }
-        viewModelScope.launch {
-            repository.getAllTransactionsFlow().collect { _adminAllTransactions.value = it }
-        }
-
-        // All withdrawals and deposits for Finance screen
-        viewModelScope.launch {
-            dao.getAllWithdrawalRequestsFlow().collect { _adminAllWithdrawals.value = it }
-        }
-        viewModelScope.launch {
-            dao.getAllDepositRequestsFlow().collect { _adminAllDeposits.value = it }
-        }
-    }
-
-    private fun applyTaskFilters(tasks: List<TaskEntity>) {
-        val query = _taskSearchQuery.value
-        val filter = _selectedPlatformFilter.value
-        _filteredTasks.value = tasks.filter { task ->
-            val matchesQuery = query.isEmpty() ||
-                    task.campaignName.contains(query, true) ||
-                    task.platform.contains(query, true) ||
-                    task.taskType.contains(query, true)
-            val matchesPlatform = filter == null || task.platform == filter
-            matchesQuery && matchesPlatform && task.status == "ACTIVE"
-        }
-    }
-
-    // ==========================================
-    // AUTH FUNCTIONS
-    // ==========================================
-    fun registerUser(name: String, email: String, phone: String, password: String, cnic: String, referralCode: String) {
-        viewModelScope.launch {
-            _isProcessing.value = true
-            _authError.value = null
-            val result = repository.signup(name, email, phone, password, cnic, referralCode.ifBlank { null })
-            _isProcessing.value = false
-            result.onFailure { _authError.value = it.message }
-        }
-    }
-
-    fun verifyOtpAndRegister(code: String) {
-        viewModelScope.launch {
-            _isProcessing.value = true
-            _authError.value = null
-            val result = repository.verifyOtpAndCompleteSignup(code)
-            _isProcessing.value = false
-            result.onSuccess { user ->
-                _currentUser.value = user
-                _activeRole.value = user.role
-                startObservingData()
-                _authSuccess.value = "Welcome, ${user.name}! Account ban gaya."
-            }.onFailure { _authError.value = it.message }
-        }
-    }
-
-    fun loginUser(identifier: String, password: String) {
-        viewModelScope.launch {
-            _isProcessing.value = true
-            _authError.value = null
-            val result = repository.login(identifier, password)
-            _isProcessing.value = false
-            result.onSuccess { user ->
-                _currentUser.value = user
-                _activeRole.value = user.role
-                startObservingData()
-                _authSuccess.value = "Login kamyab! Welcome ${user.name}"
-            }.onFailure { _authError.value = it.message }
-        }
-    }
-
-    fun loginWithGoogle(idToken: String) {
-        viewModelScope.launch {
-            _isProcessing.value = true
-            val result = repository.loginWithGoogleToken(idToken)
-            _isProcessing.value = false
-            result.onSuccess { user ->
-                _currentUser.value = user
-                _activeRole.value = user.role
-                startObservingData()
-                _authSuccess.value = "Google login kamyab! Welcome ${user.name}"
-            }.onFailure { _authError.value = it.message }
-        }
-    }
-
-    fun logout() {
-        repository.logout()
-        _currentUser.value = null
-        _activeRole.value = "EARNER"
-        _userTransactions.value = emptyList()
-        _advertiserCampaigns.value = emptyList()
-    }
-
-    fun switchActiveRole(role: String) {
-        viewModelScope.launch {
-            repository.switchRole(role)
-            _activeRole.value = role
-        }
+    fun clearToast() {
+        _toastMessage.value = null
     }
 
     fun clearAuthMessages() {
@@ -252,21 +151,12 @@ class TaskMallahViewModel(application: Application) : AndroidViewModel(applicati
         _authSuccess.value = null
     }
 
-    fun clearToast() {
-        _toastMessage.value = null
-    }
-
-    // ==========================================
-    // TASK SEARCH & FILTER
-    // ==========================================
     fun updateSearchQuery(query: String) {
         _taskSearchQuery.value = query
-        applyTaskFilters(_allTasks.value)
     }
 
     fun selectPlatformFilter(platform: String?) {
         _selectedPlatformFilter.value = platform
-        applyTaskFilters(_allTasks.value)
     }
 
     fun selectTask(task: TaskEntity) {
@@ -276,61 +166,188 @@ class TaskMallahViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    // ==========================================
-    // EARNER FUNCTIONS
-    // ==========================================
-    fun submitTaskCompletionProof(taskId: String, screenshotPath: String) {
+    // --- Authentication Actions ---
+    fun registerUser(
+        name: String,
+        email: String,
+        phone: String,
+        passwordPlain: String,
+        cnic: String,
+        referralCode: String?
+    ) {
+        _isProcessing.value = true
+        clearAuthMessages()
         viewModelScope.launch {
-            _isProcessing.value = true
-            val result = repository.submitTaskProof(taskId, screenshotPath)
+            val result = repository.signup(name, email, phone, passwordPlain, cnic, referralCode)
             _isProcessing.value = false
             result.onSuccess {
-                _toastMessage.value = "Proof submit ho gaya! Admin review karega."
-                _selectedTaskCompletion.value = repository.getCompletionForTask(taskId)
-            }.onFailure { _toastMessage.value = it.message }
+                _isOtpRequired.value = true
+                _toastMessage.value = "Tasdeeq ke liye OTP Code bhej diya gaya hai."
+            }.onFailure { exception ->
+                _authError.value = exception.message ?: "Registration nakam ho gayi."
+            }
         }
     }
 
-    fun watchAdMobAd(adType: String) {
+    fun verifyOtpAndRegister(enteredCode: String) {
+        _isProcessing.value = true
+        clearAuthMessages()
         viewModelScope.launch {
-            val result = repository.watchAd(adType)
-            result.onSuccess { amount ->
-                val updatedUser = repository.currentUser
-                _currentUser.value = updatedUser
-                _toastMessage.value = "PKR ${"%.2f".format(amount)} milgaye! Ad se earning."
-            }.onFailure { _toastMessage.value = it.message }
+            val result = repository.verifyOtpAndCompleteSignup(enteredCode)
+            _isProcessing.value = false
+            result.onSuccess { user ->
+                _currentUser.value = user
+                _activeRole.value = user.role
+                _isOtpRequired.value = false
+                _authSuccess.value = "Khush Amdeed! Aap ka TaskMallah account kamyabi se ban gaya hai."
+            }.onFailure { exception ->
+                _authError.value = exception.message ?: "OTP tasdeeq nakam ho gayi."
+            }
         }
     }
 
-    fun submitWithdrawal(amount: Double, method: String, accountTitle: String, accountNo: String) {
+    fun loginUser(identifier: String, passwordPlain: String) {
+        _isProcessing.value = true
+        clearAuthMessages()
         viewModelScope.launch {
-            val result = repository.requestWithdrawal(amount, method, accountTitle, accountNo)
+            val result = repository.login(identifier, passwordPlain)
+            _isProcessing.value = false
+            result.onSuccess { user ->
+                _currentUser.value = user
+                _activeRole.value = user.role
+                _authSuccess.value = "Khush Amdeed dobara, ${user.name}!"
+            }.onFailure { exception ->
+                _authError.value = exception.message ?: "Login nakam ho gayi."
+            }
+        }
+    }
+
+    fun loginWithGoogle(idToken: String) {
+        _isProcessing.value = true
+        clearAuthMessages()
+        viewModelScope.launch {
+            val result = repository.loginWithGoogleToken(idToken)
+            _isProcessing.value = false
+            result.onSuccess { user ->
+                _currentUser.value = user
+                _activeRole.value = user.role
+                _authSuccess.value = "Google ke zariye khush amdeed, ${user.name}!"
+            }.onFailure { exception ->
+                _authError.value = exception.message ?: "Google Sign-In nakam ho gaya."
+            }
+        }
+    }
+
+    fun forgotPassword(email: String) {
+        _isProcessing.value = true
+        clearAuthMessages()
+        viewModelScope.launch {
+            val result = repository.sendPasswordReset(email)
+            _isProcessing.value = false
+            result.onSuccess {
+                _authSuccess.value = "Password reset email bhej di gayi hai. Bara-e-meherbani apni inbox check karein."
+            }.onFailure { exception ->
+                _authError.value = exception.message ?: "Reset email bhejne mein ghalati hui."
+            }
+        }
+    }
+
+    fun switchActiveRole(role: String) {
+        viewModelScope.launch {
+            repository.switchRole(role)
+            _currentUser.value = repository.currentUser
+            _activeRole.value = role
+            _toastMessage.value = "Role switched to $role"
+        }
+    }
+
+    fun logout() {
+        repository.logout()
+        _currentUser.value = null
+        clearAuthMessages()
+        _toastMessage.value = "Account logged out successfully."
+    }
+
+    // --- KYC Submit Action ---
+    fun submitKycDetails(cnicNo: String, frontImg: String, backImg: String) {
+        _isProcessing.value = true
+        viewModelScope.launch {
+            val result = repository.submitKyc(cnicNo, frontImg, backImg)
+            _isProcessing.value = false
             result.onSuccess {
                 _currentUser.value = repository.currentUser
-                _toastMessage.value = "Withdrawal request submit ho gayi. Admin process karega."
-            }.onFailure { _toastMessage.value = it.message }
+                _toastMessage.value = "KYC tasdeeq ke liye bhej di gayi hai. 24 hours mein response milega."
+            }.onFailure {
+                _toastMessage.value = it.message ?: "KYC submit karne mein masla aya."
+            }
         }
     }
 
-    fun submitKycDetails(cnicNo: String, frontPath: String, backPath: String) {
+    // --- Task Submissions Action ---
+    fun submitTaskCompletionProof(
+        taskId: String,
+        screenshotPath: String,
+        customText: String? = null,
+        taskTitle: String? = null,
+        completionDate: Long? = null
+    ) {
+        _isProcessing.value = true
         viewModelScope.launch {
-            val result = repository.submitKyc(cnicNo, frontPath, backPath)
+            val result = repository.submitTaskProof(taskId, screenshotPath, customText, taskTitle, completionDate)
+            _isProcessing.value = false
+            result.onSuccess {
+                _toastMessage.value = "Task verification ke liye jama ho gaya hai! Shukriya."
+                val task = _selectedTask.value
+                if (task != null) {
+                    _selectedTaskCompletion.value = repository.getCompletionForTask(task.id)
+                }
+            }.onFailure {
+                _toastMessage.value = it.message ?: "Task submit karne mein masla aya."
+            }
+        }
+    }
+
+    // --- AdMob Earning Actions ---
+    fun watchAdMobAd(adType: String, rewardAmount: Double? = null) {
+        _isProcessing.value = true
+        viewModelScope.launch {
+            val result = repository.watchAd(adType, rewardAmount)
+            _isProcessing.value = false
+            result.onSuccess { reward ->
+                _currentUser.value = repository.currentUser
+                _toastMessage.value = "Mubarak! Aap ko ad dekhne par ${"%.2f".format(reward)} PKR mil gaye hain."
+            }.onFailure {
+                _toastMessage.value = it.message ?: "Ad view reward register nahi ho saka."
+            }
+        }
+    }
+
+    // --- Withdrawal Action ---
+    fun submitWithdrawal(amount: Double, payoutMethod: String, accountTitle: String, accountNo: String) {
+        _isProcessing.value = true
+        viewModelScope.launch {
+            val result = repository.requestWithdrawal(amount, payoutMethod, accountTitle, accountNo)
+            _isProcessing.value = false
             result.onSuccess {
                 _currentUser.value = repository.currentUser
-                _toastMessage.value = "KYC submit ho gayi. Admin verify karega."
-            }.onFailure { _toastMessage.value = it.message }
+                _toastMessage.value = "Withdrawal request kamyabi se jama ho chuki hai."
+            }.onFailure {
+                _toastMessage.value = it.message ?: "Withdrawal process nahi ho sakhi."
+            }
         }
     }
 
-    // ==========================================
-    // ADVERTISER FUNCTIONS
-    // ==========================================
+    // --- Advertiser Actions ---
     fun submitDepositPayment(amount: Double, method: String, proofPath: String) {
+        _isProcessing.value = true
         viewModelScope.launch {
             val result = repository.submitDepositRequest(amount, method, proofPath)
+            _isProcessing.value = false
             result.onSuccess {
-                _toastMessage.value = "Deposit proof submit ho gaya. Admin verify karega."
-            }.onFailure { _toastMessage.value = it.message }
+                _toastMessage.value = "Deposit proof review ke liye bhej diya gaya hai."
+            }.onFailure {
+                _toastMessage.value = it.message ?: "Deposit submit karne mein masla aya."
+            }
         }
     }
 
@@ -343,149 +360,140 @@ class TaskMallahViewModel(application: Application) : AndroidViewModel(applicati
         slots: Int,
         pricePerSlot: Double
     ) {
+        _isProcessing.value = true
         viewModelScope.launch {
             val result = repository.createCampaign(platform, taskType, name, url, instructions, slots, pricePerSlot)
+            _isProcessing.value = false
             result.onSuccess {
                 _currentUser.value = repository.currentUser
-                _toastMessage.value = "Campaign create ho gaya! Earners ab dekhenge."
-            }.onFailure { _toastMessage.value = it.message }
+                _toastMessage.value = "Campaign kamyabi se active ho gaya hai!"
+            }.onFailure {
+                _toastMessage.value = it.message ?: "Campaign create nahi ho saka."
+            }
         }
     }
 
-    // ==========================================
-    // ADMIN FUNCTIONS — TASK REVIEWS
-    // ==========================================
+    // --- Super Admin Moderation Actions ---
     fun approveOrRejectTaskCompletion(completionId: String, approve: Boolean, reason: String? = null) {
+        _isProcessing.value = true
         viewModelScope.launch {
             val result = repository.reviewTaskCompletion(completionId, approve, reason)
+            _isProcessing.value = false
             result.onSuccess {
-                _toastMessage.value = if (approve) "Task approved! Earner ko payment mil gayi." else "Task reject kar diya gaya."
-            }.onFailure { _toastMessage.value = it.message }
+                _toastMessage.value = if (approve) "Task kamyabi se APPROVE kar diya gaya." else "Task REJECT kar diya gaya."
+            }.onFailure {
+                _toastMessage.value = it.message ?: "Review process karne mein masla aya."
+            }
         }
     }
 
     fun approveOrRejectKyc(userId: String, approve: Boolean, reason: String? = null) {
+        _isProcessing.value = true
         viewModelScope.launch {
             val result = repository.reviewKyc(userId, approve, reason)
-            result.onSuccess {
-                _toastMessage.value = if (approve) "KYC approved!" else "KYC rejected."
-            }.onFailure { _toastMessage.value = it.message }
-        }
-    }
-
-    // ==========================================
-    // ADMIN FUNCTIONS — FINANCE
-    // ==========================================
-    fun processDepositRequest(requestId: String, approve: Boolean, reason: String? = null) {
-        viewModelScope.launch {
-            val result = repository.processDeposit(requestId, approve, reason)
-            result.onSuccess {
-                _toastMessage.value = if (approve) "Deposit approve ho gaya! Balance add kar diya." else "Deposit reject kar diya."
-            }.onFailure { _toastMessage.value = it.message }
-        }
-    }
-
-    fun processWithdrawalRequest(requestId: String, approve: Boolean, reason: String? = null) {
-        viewModelScope.launch {
-            val result = repository.processWithdrawal(requestId, approve, reason)
-            result.onSuccess {
-                _toastMessage.value = if (approve) "Withdrawal complete! User ko pesa bhej diya." else "Withdrawal reject. Balance wapas kar diya."
-            }.onFailure { _toastMessage.value = it.message }
-        }
-    }
-
-    // ==========================================
-    // ADMIN FUNCTIONS — USER MANAGEMENT
-    // ==========================================
-    fun manualWalletAdjust(userId: String, amount: Double, reason: String) {
-        viewModelScope.launch {
-            val result = repository.adjustUserWallet(userId, amount, reason)
-            result.onSuccess {
-                _toastMessage.value = "Balance adjust ho gaya: PKR ${if (amount > 0) "+$amount" else "$amount"}"
-            }.onFailure { _toastMessage.value = it.message }
-        }
-    }
-
-    fun moderateUserBan(userId: String, ban: Boolean, reason: String? = null) {
-        viewModelScope.launch {
-            val result = repository.banUser(userId, ban, reason)
-            result.onSuccess {
-                _toastMessage.value = if (ban) "User ban ho gaya." else "User ka ban hata diya gaya."
-            }.onFailure { _toastMessage.value = it.message }
-        }
-    }
-
-    // DELETE USER — Remove completely from DB and Firebase
-    fun deleteUser(userId: String) {
-        viewModelScope.launch {
-            _isProcessing.value = true
-            val result = repository.deleteUserCompletely(userId)
             _isProcessing.value = false
             result.onSuccess {
-                _toastMessage.value = "User delete ho gaya."
-            }.onFailure { _toastMessage.value = "Delete mein masla: ${it.message}" }
+                _toastMessage.value = if (approve) "KYC tasdeeq kamyab!" else "KYC REJECT kar di gayi."
+            }.onFailure {
+                _toastMessage.value = it.message ?: "Review process karne mein masla aya."
+            }
         }
     }
 
-    // ==========================================
-    // ADMIN FUNCTIONS — TASK MANAGEMENT
-    // ==========================================
-    fun adminCreateTask(
-        platform: String,
-        taskType: String,
-        name: String,
-        url: String,
-        instructions: String,
-        slots: Int,
-        userPayout: Double
-    ) {
+    fun approveOrRejectDeposit(requestId: String, approve: Boolean, reason: String? = null) {
+        _isProcessing.value = true
         viewModelScope.launch {
-            val task = TaskEntity(
-                id = "admin_task_" + UUID.randomUUID().toString().take(8),
-                advertiserId = _currentUser.value?.id ?: "admin",
-                campaignName = name,
-                platform = platform,
-                category = "Admin Created",
-                taskType = taskType,
-                targetUrl = url,
-                instructions = instructions,
-                advPricePkr = userPayout / 0.70,
-                userPayoutPkr = userPayout,
-                adminMarginPkr = (userPayout / 0.70) * 0.30,
-                totalSlots = slots,
-                status = "ACTIVE"
-            )
-            dao.insertTask(task)
-            _toastMessage.value = "Task '$name' create ho gaya!"
+            val result = repository.processDeposit(requestId, approve, reason)
+            _isProcessing.value = false
+            result.onSuccess {
+                _toastMessage.value = if (approve) "Deposit APPROVE ho gaya! Advertiser balance barh gaya." else "Deposit REJECT kar diya gaya."
+            }.onFailure {
+                _toastMessage.value = it.message ?: "Review process karne mein masla aya."
+            }
         }
     }
 
-    fun deleteTask(taskId: String) {
+    fun approveOrRejectWithdrawal(requestId: String, approve: Boolean, reason: String? = null) {
+        _isProcessing.value = true
         viewModelScope.launch {
-            dao.deleteTaskById(taskId)
-            _toastMessage.value = "Task delete ho gaya."
+            val result = repository.processWithdrawal(requestId, approve, reason)
+            _isProcessing.value = false
+            result.onSuccess {
+                _toastMessage.value = if (approve) "Withdrawal mukammal!" else "Withdrawal REJECT kar di gayi. Balance wapis ho gaya."
+            }.onFailure {
+                _toastMessage.value = it.message ?: "Review process karne mein masla aya."
+            }
         }
     }
 
-    fun updateTaskStatus(taskId: String, status: String) {
+    fun manualWalletAdjust(userId: String, amount: Double, reason: String) {
+        _isProcessing.value = true
         viewModelScope.launch {
-            val task = dao.getTaskById(taskId) ?: return@launch
-            task.status = status
-            dao.updateTask(task)
-            _toastMessage.value = "Task status update: $status"
+            val result = repository.adjustUserWallet(userId, amount, reason)
+            _isProcessing.value = false
+            result.onSuccess {
+                _toastMessage.value = "Wallet adjustment complete: $amount PKR"
+            }.onFailure {
+                _toastMessage.value = it.message ?: "Adjustment process nahi ho saki."
+            }
         }
     }
 
-    // ==========================================
-    // SUBSCRIPTION
-    // ==========================================
-    fun buySubscription(tier: String) {
+    fun moderateUserBan(userId: String, ban: Boolean, reason: String?) {
+        _isProcessing.value = true
+        viewModelScope.launch {
+            val result = repository.banUser(userId, ban, reason)
+            _isProcessing.value = false
+            result.onSuccess {
+                _toastMessage.value = if (ban) "User ko BAN kar diya gaya hai." else "User ko UNBAN kar diya gaya."
+            }.onFailure {
+                _toastMessage.value = it.message ?: "Action complete nahi ho saki."
+            }
+        }
+    }
+
+    fun buySubscriptionTier(tier: String) {
+        _isProcessing.value = true
         viewModelScope.launch {
             val result = repository.buySubscription(tier)
+            _isProcessing.value = false
             result.onSuccess {
                 _currentUser.value = repository.currentUser
-                _toastMessage.value = "$tier package activate ho gaya!"
-            }.onFailure { _toastMessage.value = it.message }
+                _toastMessage.value = "Mubarak! Premium $tier Package kamyabi se active ho chuka hai."
+            }.onFailure {
+                _toastMessage.value = it.message ?: "Package purchase nahi ho saca."
+            }
         }
     }
-}
+
+    fun updateProfilePicture(uri: String) {
+        _isProcessing.value = true
+        viewModelScope.launch {
+            val result = repository.updateProfilePic(uri)
+            _isProcessing.value = false
+            result.onSuccess {
+                _currentUser.value = repository.currentUser
+                _toastMessage.value = "Profile picture kamyabi se tabdeel ho chuki hai!"
+            }.onFailure {
+                _toastMessage.value = it.message ?: "Profile picture update nahi ho saki."
+            }
+        }
+    }
+
+    fun linkNewPaymentAccount(bankName: String, accountTitle: String, accountNumber: String, iban: String) {
+        _isProcessing.value = true
+        viewModelScope.launch {
+            val result = repository.linkPaymentAccount(bankName, accountTitle, accountNumber, iban)
+            _isProcessing.value = false
+            result.onSuccess {
+                _toastMessage.value = "Naya Payment Account kamyabi se link ho gaya!"
+            }.onFailure {
+                _toastMessage.value = it.message ?: "Account link karne mein masla aya."
+            }
+        }
+    }
+
+    fun changePaymentAccountLock(userId: String, lock: Boolean) {
+        _isProcessing.value = true
+        viewModelScope.launch {
+            val
