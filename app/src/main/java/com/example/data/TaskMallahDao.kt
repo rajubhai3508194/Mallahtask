@@ -163,4 +163,15 @@ interface TaskMallahDao {
 
     @Query("DELETE FROM saved_accounts WHERE id = :id")
     suspend fun deleteSavedAccountById(id: String)
+@Query("DELETE FROM users WHERE id = :userId")
+suspend fun deleteUserById(userId: String)
+
+@Query("DELETE FROM tasks WHERE id = :taskId")
+suspend fun deleteTaskById(taskId: String)
+
+@Query("SELECT * FROM withdrawal_requests ORDER BY requestedAt DESC")
+fun getAllWithdrawalRequestsFlow(): Flow<List<WithdrawalRequestEntity>>
+
+@Query("SELECT * FROM deposit_requests ORDER BY requestedAt DESC")
+fun getAllDepositRequestsFlow(): Flow<List<DepositRequestEntity>>
 }
