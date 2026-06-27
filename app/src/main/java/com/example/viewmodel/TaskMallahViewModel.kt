@@ -31,7 +31,6 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
         _isOtpRequired.value = false
     }
 
-    // --- Earner Flows ---
     val allTasks: StateFlow<List<TaskEntity>> = repository.getTasksFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -90,8 +89,6 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
             if (user != null) repository.getSavedAccountsFlow(user.id) else flowOf(emptyList())
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-
-    // --- Super Admin Realtime Flows ---
     val adminPendingCompletions: StateFlow<List<CompletionEntity>> = repository.getAllPendingCompletionsFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -113,7 +110,6 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
     val adminAllCompletions: StateFlow<List<CompletionEntity>> = repository.getAllCompletionsFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // --- Per-user transaction lookup for Admin (view any user's history) ---
     private val _selectedUserForHistory = MutableStateFlow<UserEntity?>(null)
     val selectedUserForHistory: StateFlow<UserEntity?> = _selectedUserForHistory.asStateFlow()
 
@@ -126,8 +122,6 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
         _selectedUserForHistory.value = user
     }
 
-
-    // --- Operations UI States ---
     private val _toastMessage = MutableStateFlow<String?>(null)
     val toastMessage: StateFlow<String?> = _toastMessage.asStateFlow()
 
@@ -166,7 +160,6 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
         }
     }
 
-    // --- Authentication Actions ---
     fun registerUser(
         name: String,
         email: String,
@@ -268,7 +261,6 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
         _toastMessage.value = "Account logged out successfully."
     }
 
-    // --- KYC Submit Action ---
     fun submitKycDetails(cnicNo: String, frontImg: String, backImg: String) {
         _isProcessing.value = true
         viewModelScope.launch {
@@ -283,7 +275,6 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
         }
     }
 
-    // --- Task Submissions Action ---
     fun submitTaskCompletionProof(
         taskId: String,
         screenshotPath: String,
@@ -307,7 +298,6 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
         }
     }
 
-    // --- AdMob Earning Actions ---
     fun watchAdMobAd(adType: String, rewardAmount: Double? = null) {
         _isProcessing.value = true
         viewModelScope.launch {
@@ -322,7 +312,6 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
         }
     }
 
-    // --- Withdrawal Action ---
     fun submitWithdrawal(amount: Double, payoutMethod: String, accountTitle: String, accountNo: String) {
         _isProcessing.value = true
         viewModelScope.launch {
@@ -337,7 +326,6 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
         }
     }
 
-    // --- Advertiser Actions ---
     fun submitDepositPayment(amount: Double, method: String, proofPath: String) {
         _isProcessing.value = true
         viewModelScope.launch {
@@ -361,139 +349,3 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
         pricePerSlot: Double
     ) {
         _isProcessing.value = true
-        viewModelScope.launch {
-            val result = repository.createCampaign(platform, taskType, name, url, instructions, slots, pricePerSlot)
-            _isProcessing.value = false
-            result.onSuccess {
-                _currentUser.value = repository.currentUser
-                _toastMessage.value = "Campaign kamyabi se active ho gaya hai!"
-            }.onFailure {
-                _toastMessage.value = it.message ?: "Campaign create nahi ho saka."
-            }
-        }
-    }
-
-    // --- Super Admin Moderation Actions ---
-    fun approveOrRejectTaskCompletion(completionId: String, approve: Boolean, reason: String? = null) {
-        _isProcessing.value = true
-        viewModelScope.launch {
-            val result = repository.reviewTaskCompletion(completionId, approve, reason)
-            _isProcessing.value = false
-            result.onSuccess {
-                _toastMessage.value = if (approve) "Task kamyabi se APPROVE kar diya gaya." else "Task REJECT kar diya gaya."
-            }.onFailure {
-                _toastMessage.value = it.message ?: "Review process karne mein masla aya."
-            }
-        }
-    }
-
-    fun approveOrRejectKyc(userId: String, approve: Boolean, reason: String? = null) {
-        _isProcessing.value = true
-        viewModelScope.launch {
-            val result = repository.reviewKyc(userId, approve, reason)
-            _isProcessing.value = false
-            result.onSuccess {
-                _toastMessage.value = if (approve) "KYC tasdeeq kamyab!" else "KYC REJECT kar di gayi."
-            }.onFailure {
-                _toastMessage.value = it.message ?: "Review process karne mein masla aya."
-            }
-        }
-    }
-
-    fun approveOrRejectDeposit(requestId: String, approve: Boolean, reason: String? = null) {
-        _isProcessing.value = true
-        viewModelScope.launch {
-            val result = repository.processDeposit(requestId, approve, reason)
-            _isProcessing.value = false
-            result.onSuccess {
-                _toastMessage.value = if (approve) "Deposit APPROVE ho gaya! Advertiser balance barh gaya." else "Deposit REJECT kar diya gaya."
-            }.onFailure {
-                _toastMessage.value = it.message ?: "Review process karne mein masla aya."
-            }
-        }
-    }
-
-    fun approveOrRejectWithdrawal(requestId: String, approve: Boolean, reason: String? = null) {
-        _isProcessing.value = true
-        viewModelScope.launch {
-            val result = repository.processWithdrawal(requestId, approve, reason)
-            _isProcessing.value = false
-            result.onSuccess {
-                _toastMessage.value = if (approve) "Withdrawal mukammal!" else "Withdrawal REJECT kar di gayi. Balance wapis ho gaya."
-            }.onFailure {
-                _toastMessage.value = it.message ?: "Review process karne mein masla aya."
-            }
-        }
-    }
-
-    fun manualWalletAdjust(userId: String, amount: Double, reason: String) {
-        _isProcessing.value = true
-        viewModelScope.launch {
-            val result = repository.adjustUserWallet(userId, amount, reason)
-            _isProcessing.value = false
-            result.onSuccess {
-                _toastMessage.value = "Wallet adjustment complete: $amount PKR"
-            }.onFailure {
-                _toastMessage.value = it.message ?: "Adjustment process nahi ho saki."
-            }
-        }
-    }
-
-    fun moderateUserBan(userId: String, ban: Boolean, reason: String?) {
-        _isProcessing.value = true
-        viewModelScope.launch {
-            val result = repository.banUser(userId, ban, reason)
-            _isProcessing.value = false
-            result.onSuccess {
-                _toastMessage.value = if (ban) "User ko BAN kar diya gaya hai." else "User ko UNBAN kar diya gaya."
-            }.onFailure {
-                _toastMessage.value = it.message ?: "Action complete nahi ho saki."
-            }
-        }
-    }
-
-    fun buySubscriptionTier(tier: String) {
-        _isProcessing.value = true
-        viewModelScope.launch {
-            val result = repository.buySubscription(tier)
-            _isProcessing.value = false
-            result.onSuccess {
-                _currentUser.value = repository.currentUser
-                _toastMessage.value = "Mubarak! Premium $tier Package kamyabi se active ho chuka hai."
-            }.onFailure {
-                _toastMessage.value = it.message ?: "Package purchase nahi ho saca."
-            }
-        }
-    }
-
-    fun updateProfilePicture(uri: String) {
-        _isProcessing.value = true
-        viewModelScope.launch {
-            val result = repository.updateProfilePic(uri)
-            _isProcessing.value = false
-            result.onSuccess {
-                _currentUser.value = repository.currentUser
-                _toastMessage.value = "Profile picture kamyabi se tabdeel ho chuki hai!"
-            }.onFailure {
-                _toastMessage.value = it.message ?: "Profile picture update nahi ho saki."
-            }
-        }
-    }
-
-    fun linkNewPaymentAccount(bankName: String, accountTitle: String, accountNumber: String, iban: String) {
-        _isProcessing.value = true
-        viewModelScope.launch {
-            val result = repository.linkPaymentAccount(bankName, accountTitle, accountNumber, iban)
-            _isProcessing.value = false
-            result.onSuccess {
-                _toastMessage.value = "Naya Payment Account kamyabi se link ho gaya!"
-            }.onFailure {
-                _toastMessage.value = it.message ?: "Account link karne mein masla aya."
-            }
-        }
-    }
-
-    fun changePaymentAccountLock(userId: String, lock: Boolean) {
-        _isProcessing.value = true
-        viewModelScope.launch {
-            val
