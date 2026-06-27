@@ -347,7 +347,30 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
         instructions: String,
         slots: Int,
         pricePerSlot: Double
-    ) {
+    ) 
+    fun approveOrRejectTaskCompletion(id: String, approve: Boolean) {
+    viewModelScope.launch {
+        repository.approveOrRejectTaskCompletion(id, approve)
+    }
+}
+
+fun approveOrRejectKyc(id: String, approve: Boolean) {
+    viewModelScope.launch {
+        repository.approveOrRejectKyc(id, approve)
+    }
+}
+
+fun moderateUserBan(userId: String, ban: Boolean) {
+    viewModelScope.launch {
+        repository.moderateUserBan(userId, ban)
+    }
+}
+
+fun manualWalletAdjust(userId: String, amount: Double) {
+    viewModelScope.launch {
+        repository.manualWalletAdjust(userId, amount)
+    }
+}{
         _isProcessing.value = true
         fun submitCampaign(
     platform: String,
