@@ -1432,4 +1432,69 @@ class TaskMallahRepository(private val context: Context, private val db: AppData
         dao.deleteSavedAccountById(accountId)
         return Result.success(Unit)
     }
+// ==========================================
+    // ADMIN: FULL USER MANAGEMENT
+    // ==========================================
+
+    suspend fun deleteUserCompletely(userId: String): Result<Unit> {
+        val admin = currentUser ?: return Result.failure(Exception("Admin not logged in."))
+        if (admin.role != "ADMIN") return Result.failure(Exception("Permission denied."))
+        if (userId == admin.id) return Result.failure(Exception("Aap khud ko delete nahi kar sakte."))
+
+        try {
+            dao.deleteUserById(userId)
+
+            if (firestore != null) {
+                try {
+                    Tasks.await(firestore!!.collection("users").document(userId).delete())
+                } catch (e: Exception) {
+                    Log.e("TaskMallahRepository", "Failed to delete user from Firestore: ${e.message}")
+                }
+            }
+            return Result.success(Unit)
+        } catch (e: Exception) {
+            return Result.failure(Exception("User delete karne mein masla: ${e.message}"))
+        }
+    }
+
+    suspend fun updateUserRole(userId: String, newRole: String): Result<Unit> {
+        val admin = currentUser ?: return Result.failure(Exception("Admin not logged in."))
+        if (admin.role != "ADMIN") return Result.failure(Exception("Permission denied."))
+
+        val user = dao.getUserById(userId) ?: return Result.failure(Exception("User not found."))
+        val updatedUser = user.copy(role = newRole)
+        dao.updateUser(updatedUser)
+
+        if (firestore != null) {
+            try {
+                Tasks.await(
+                    firestore!!.collection("users").document(userId).update("role", newRole)
+                )
+            } catch (e: Exception) {
+                Log.e("TaskMallahRepository", "Failed to update role in Firestore: ${e.message}")
+            }
+        }
+        return Result.success(Unit)
+    }
+
+    suspend fun updateUserDetailsByAdmin(userId: String, name: String, email: String, phone: String): Result<Unit> {
+        val admin = currentUser ?: return Result.failure(Exception("Admin not logged in."))
+        if (admin.role != "ADMIN") return Result.failure(Exception("Permission denied."))
+
+        val user = dao.getUserById(userId) ?: return Result.failure(Exception("User not found."))
+        val updatedUser = user.copy(name = name, email = email, phone = phone)
+        dao.updateUser(updatedUser)
+
+        if (firestore != null) {
+            try {
+                Tasks.await(
+                    firestore!!.collection("users").document(userId)
+                        .update("name", name, "email", email, "phone", phone)
+                )
+            } catch (e: Exception) {
+                Log.e("TaskMallahRepository", "Failed to update user details in Firestore: ${e.message}")
+            }
+        }
+        return Result.success(Unit)
+    }
 }
