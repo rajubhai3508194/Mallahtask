@@ -349,3 +349,28 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
         pricePerSlot: Double
     ) {
         _isProcessing.value = true
+        fun submitCampaign(
+    platform: String,
+    taskType: String,
+    name: String,
+    url: String,
+    instructions: String,
+    slots: Int,
+    pricePerSlot: Double
+) {
+    _isProcessing.value = true
+
+    viewModelScope.launch {
+        val result = repository.submitCampaign(
+            platform, taskType, name, url, instructions, slots, pricePerSlot
+        )
+
+        _isProcessing.value = false
+
+        result.onSuccess {
+            _toastMessage.value = "Campaign successfully publish ho gaya!"
+        }.onFailure {
+            _toastMessage.value = it.message ?: "Campaign fail ho gaya"
+        }
+    }
+}
