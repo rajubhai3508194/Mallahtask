@@ -386,14 +386,3 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
                 .onFailure { _toastMessage.value = it.message ?: "Account delete nahi ho saka." }
         }
     }
-}
-
-class ViewModelFactory(private val repository: TaskMallahRepository) : ViewModelProvider.Factory {
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(TaskMallahViewModel::class.java)) {
-            @Suppress("UNCHECKED_CAST")
-            return TaskMallahViewModel(repository) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
-    }
-}
