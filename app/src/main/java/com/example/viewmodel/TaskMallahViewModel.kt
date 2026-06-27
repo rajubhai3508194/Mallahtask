@@ -384,5 +384,6 @@ class TaskMallahViewModel(private val repository: TaskMallahRepository) : ViewMo
             _isProcessing.value = false
             result.onSuccess { _toastMessage.value = "Account kamyabi se delete ho gaya." }
                 .onFailure { _toastMessage.value = it.message ?: "Account delete nahi ho saka." }
-        }
+      }
     }
+}
